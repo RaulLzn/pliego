@@ -29,12 +29,15 @@ async function renderPdf(reader, bytes) {
   let pdf
   let disposed = false
   const pages = []
+  const visiblePages = new Set()
   let resizeTimer
-  let observer
+  let intersectionObserver
+  let resizeObserver
   reader._visualCleanup = () => {
     if (disposed) return
     disposed = true
-    observer?.disconnect()
+    intersectionObserver?.disconnect()
+    resizeObserver?.disconnect()
     clearTimeout(resizeTimer)
     for (const item of pages) {
       item.task?.cancel()
@@ -53,42 +56,61 @@ async function renderPdf(reader, bytes) {
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     if (disposed) throw new DOMException('Carga cancelada', 'AbortError')
     const page = await pdf.getPage(pageNumber)
+    const slot = document.createElement('div')
+    slot.className = 'pdf-page-slot'
     const canvas = document.createElement('canvas')
     canvas.className = 'pdf-page'
-    shell.appendChild(canvas)
-    pages.push({ page, canvas, task: null })
+    slot.appendChild(canvas)
+    shell.appendChild(slot)
+    pages.push({ page, canvas, slot, task: null })
   }
-  let drawing = false
-  let redrawRequested = false
-  const redraw = async () => {
-    if (disposed) return
-    if (drawing) { redrawRequested = true; return }
-    drawing = true
+  const sizePage = (item) => {
     const available = Math.max(280, shell.clientWidth || reader.clientWidth - 32)
-    for (const item of pages) {
-      if (disposed) break
-      item.task?.cancel()
-      const base = item.page.getViewport({ scale: 1 })
-      const cssWidth = Math.min(980, available)
-      const viewport = item.page.getViewport({ scale: cssWidth / base.width })
-      const ratio = Math.min(2, devicePixelRatio || 1)
-      item.canvas.width = Math.ceil(viewport.width * ratio)
-      item.canvas.height = Math.ceil(viewport.height * ratio)
-      item.canvas.style.width = `${Math.floor(viewport.width)}px`
-      item.canvas.style.height = `${Math.floor(viewport.height)}px`
-      item.task = item.page.render({ canvasContext: item.canvas.getContext('2d'), viewport, transform: ratio === 1 ? null : [ratio, 0, 0, ratio, 0, 0] })
-      try { await item.task.promise } catch (error) { if (error?.name !== 'RenderingCancelledException') throw error }
-    }
-    drawing = false
-    if (disposed) return
-    if (redrawRequested) { redrawRequested = false; void redraw() }
+    const base = item.page.getViewport({ scale: 1 })
+    const cssWidth = Math.min(980, available)
+    const viewport = item.page.getViewport({ scale: cssWidth / base.width })
+    item.canvas.style.width = `${Math.floor(viewport.width)}px`
+    item.canvas.style.height = `${Math.floor(viewport.height)}px`
+    item.slot.style.width = `${Math.floor(viewport.width)}px`
+    item.slot.style.height = `${Math.floor(viewport.height)}px`
+    return viewport
   }
-  await redraw()
-  observer = new ResizeObserver(() => {
+  const renderPage = async (item) => {
+    if (disposed || !visiblePages.has(item)) return
+    item.task?.cancel()
+    const viewport = sizePage(item)
+    const ratio = Math.min(2, devicePixelRatio || 1)
+    item.canvas.width = Math.ceil(viewport.width * ratio)
+    item.canvas.height = Math.ceil(viewport.height * ratio)
+    item.task = item.page.render({ canvasContext: item.canvas.getContext('2d'), viewport, transform: ratio === 1 ? null : [ratio, 0, 0, ratio, 0, 0] })
+    try { await item.task.promise } catch (error) { if (error?.name !== 'RenderingCancelledException') throw error }
+  }
+  pages.forEach(sizePage)
+  intersectionObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const item = pages.find((candidate) => candidate.slot === entry.target)
+      if (!item) continue
+      if (entry.isIntersecting) {
+        visiblePages.add(item)
+        void renderPage(item)
+      } else {
+        visiblePages.delete(item)
+        item.task?.cancel()
+        item.page.cleanup()
+        item.canvas.width = 0
+        item.canvas.height = 0
+      }
+    }
+  }, { root: reader.parentElement, rootMargin: '1800px 0px' })
+  pages.forEach((item) => intersectionObserver.observe(item.slot))
+  resizeObserver = new ResizeObserver(() => {
     clearTimeout(resizeTimer)
-    resizeTimer = setTimeout(() => void redraw(), 120)
+    resizeTimer = setTimeout(() => {
+      pages.forEach(sizePage)
+      visiblePages.forEach((item) => void renderPage(item))
+    }, 120)
   })
-  observer.observe(shell)
+  resizeObserver.observe(shell)
   return { words: 0, detail: `${pdf.numPages} páginas` }
 }
 
@@ -111,17 +133,45 @@ async function renderEpub(reader, bytes) {
   const opf = new DOMParser().parseFromString(opfText, 'application/xml')
   const manifest = new Map(Array.from(opf.querySelectorAll('manifest item')).map((item) => [item.getAttribute('id'), item.getAttribute('href')]))
   const base = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : ''
-  const chapters = []
+  const chapterFiles = []
   for (const item of opf.querySelectorAll('spine itemref')) {
     const href = manifest.get(item.getAttribute('idref'))
     if (!href) continue
-    const html = await zip.file(base + decodeURIComponent(href))?.async('text')
-    if (!html) continue
-    const doc = new DOMParser().parseFromString(html, 'text/html')
-    chapters.push(doc.body?.innerHTML || '')
+    const file = zip.file(base + decodeURIComponent(href))
+    if (file) chapterFiles.push(file)
   }
-  reader.innerHTML = `<div class="ebook-document">${sanitizeHtml(chapters.join('<hr>'))}</div>`
-  return { words: textWords(reader.textContent), detail: `${chapters.length} capítulos` }
+  reader.innerHTML = '<div class="ebook-document"></div><div class="visual-loading">Cargando más capítulos…</div>'
+  const shell = reader.querySelector('.ebook-document')
+  const sentinel = reader.querySelector('.visual-loading')
+  let nextChapter = 0
+  let loading = false
+  let disposed = false
+  let words = 0
+  const appendBatch = async () => {
+    if (loading || disposed || nextChapter >= chapterFiles.length) return
+    loading = true
+    const end = Math.min(chapterFiles.length, nextChapter + 4)
+    for (; nextChapter < end && !disposed; nextChapter += 1) {
+      const html = await chapterFiles[nextChapter].async('text')
+      if (disposed) break
+      const doc = new DOMParser().parseFromString(html, 'text/html')
+      const chapter = document.createElement('section')
+      chapter.className = 'ebook-chapter'
+      chapter.innerHTML = sanitizeHtml(doc.body?.innerHTML || '')
+      words += textWords(chapter.textContent)
+      if (shell.childElementCount) shell.appendChild(document.createElement('hr'))
+      shell.appendChild(chapter)
+    }
+    loading = false
+    sentinel.classList.toggle('hidden', nextChapter >= chapterFiles.length)
+  }
+  const observer = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) void appendBatch()
+  }, { root: reader.parentElement, rootMargin: '1200px 0px' })
+  observer.observe(sentinel)
+  reader._visualCleanup = () => { disposed = true; observer.disconnect() }
+  await appendBatch()
+  return { words, detail: `${chapterFiles.length} capítulos · carga progresiva` }
 }
 
 function renderImage(reader, bytes, path) {
@@ -142,7 +192,6 @@ function renderImage(reader, bytes, path) {
   image.onerror = revoke
   reader._visualCleanup = () => {
     image.onload = null
-    image.onerror = null
     image.src = ''
     revoke()
   }
@@ -156,10 +205,42 @@ export async function renderTableDocument(reader, text, delimiter) {
   const parsed = Papa.parse(text, { delimiter, skipEmptyLines: true })
   const rows = parsed.data
   const head = rows[0] || []
+  const bodyRows = rows.slice(1)
+  const rowHeight = 38
+  const overscan = 30
+  const windowSize = 160
   reader.classList.remove('empty')
   reader.classList.add('visual-document')
-  reader.innerHTML = `<div class="table-document"><table><thead><tr>${head.map((cell) => `<th>${escapeHtml(String(cell))}</th>`).join('')}</tr></thead><tbody>${rows.slice(1).map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(String(cell))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
-  return { words: rows.flat().length, detail: `${Math.max(0, rows.length - 1)} filas · ${head.length} columnas` }
+  reader.innerHTML = `<div class="table-document"><table><thead><tr>${head.map((cell) => `<th>${escapeHtml(String(cell))}</th>`).join('')}</tr></thead><tbody></tbody></table></div>`
+  const scrollRoot = reader.parentElement
+  const table = reader.querySelector('table')
+  const body = reader.querySelector('tbody')
+  let frame = 0
+  let renderedStart = -1
+  const renderWindow = () => {
+    frame = 0
+    const relativeTop = Math.max(0, scrollRoot.scrollTop - table.offsetTop)
+    const start = Math.max(0, Math.floor(relativeTop / rowHeight) - overscan)
+    const end = Math.min(bodyRows.length, start + windowSize)
+    if (start === renderedStart) return
+    renderedStart = start
+    const span = Math.max(1, head.length)
+    const top = start ? `<tr class="virtual-spacer" aria-hidden="true"><td colspan="${span}" style="height:${start * rowHeight}px"></td></tr>` : ''
+    const visible = bodyRows.slice(start, end).map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(String(cell))}</td>`).join('')}</tr>`).join('')
+    const bottomRows = bodyRows.length - end
+    const bottom = bottomRows ? `<tr class="virtual-spacer" aria-hidden="true"><td colspan="${span}" style="height:${bottomRows * rowHeight}px"></td></tr>` : ''
+    body.innerHTML = top + visible + bottom
+  }
+  const scheduleRender = () => {
+    if (!frame) frame = requestAnimationFrame(renderWindow)
+  }
+  scrollRoot.addEventListener('scroll', scheduleRender, { passive: true })
+  reader._visualCleanup = () => {
+    scrollRoot.removeEventListener('scroll', scheduleRender)
+    if (frame) cancelAnimationFrame(frame)
+  }
+  renderWindow()
+  return { words: rows.reduce((total, row) => total + row.length, 0), detail: `${Math.max(0, rows.length - 1)} filas · ${head.length} columnas · vista optimizada` }
 }
 
 export async function renderMermaidDocument(reader, source) {

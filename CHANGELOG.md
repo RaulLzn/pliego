@@ -2,6 +2,16 @@
 
 Todos los cambios relevantes de Pliego se documentan en este archivo. El proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-07-18
+
+### Documentos grandes
+
+- PDF virtualizado sin alterar escala ni nitidez: mantiene las dimensiones de todas las páginas y solo conserva canvas cercanos al viewport.
+- Tablas CSV y TSV virtualizadas con una ventana de filas y encabezado persistente.
+- EPUB con carga progresiva de capítulos conforme avanza la lectura.
+- Indexación de carpetas acotada a 2 MB de texto por archivo para evitar picos al explorar bibliotecas grandes.
+- Límites seguros y mensajes explícitos para documentos visuales mayores de 128 MB y textos mayores de 32 MB.
+
 ## [1.0.1] - 2026-07-18
 
 ### Rendimiento y estabilidad
@@ -64,3 +74,4 @@ Primera versión pública de Pliego, una biblioteca documental visual y local pa
 
 [1.0.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.0.0
 [1.0.1]: https://github.com/RaulLzn/pliego/releases/tag/v1.0.1
+[1.1.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.1.0

@@ -1,10 +1,15 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use pulldown_cmark::{html, Options, Parser};
 use serde::Serialize;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 
 mod codex;
+
+const MAX_VISUAL_FILE_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_TEXT_FILE_BYTES: u64 = 32 * 1024 * 1024;
+const INDEX_TEXT_BYTES: u64 = 2 * 1024 * 1024;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -182,7 +187,7 @@ fn collect_document_index(dir: &Path, entries: &mut Vec<DocumentIndexEntry>) {
             continue;
         };
         let contents = if matches!(kind, "markdown" | "text" | "table" | "mermaid") {
-            std::fs::read_to_string(&path).unwrap_or_default()
+            read_text_prefix(&path, INDEX_TEXT_BYTES).unwrap_or_default()
         } else {
             String::new()
         };
@@ -201,6 +206,13 @@ fn collect_document_index(dir: &Path, entries: &mut Vec<DocumentIndexEntry>) {
     }
 }
 
+fn read_text_prefix(path: &Path, limit: u64) -> Result<String, String> {
+    let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut bytes = Vec::new();
+    file.take(limit).read_to_end(&mut bytes).map_err(|error| error.to_string())?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 #[tauri::command]
 fn list_document_index(dir: String) -> Vec<DocumentIndexEntry> {
     let mut entries = Vec::new();
@@ -217,6 +229,13 @@ fn list_document_index(dir: String) -> Vec<DocumentIndexEntry> {
 fn read_binary_document(path: String) -> Result<BinaryPayload, String> {
     let file_path = Path::new(&path);
     let kind = document_kind(file_path).ok_or("Formato no soportado")?;
+    let size = std::fs::metadata(file_path).map_err(|error| error.to_string())?.len();
+    if size > MAX_VISUAL_FILE_BYTES {
+        return Err(format!(
+            "El archivo ocupa {:.1} MB; el límite seguro de visualización es 128 MB",
+            size as f64 / 1_048_576.0
+        ));
+    }
     let bytes = std::fs::read(file_path).map_err(|error| error.to_string())?;
     Ok(BinaryPayload {
         file_name: file_path
@@ -242,6 +261,13 @@ fn render_markdown_text(contents: String) -> String {
 #[tauri::command]
 fn read_markdown_file(path: String, folder: Option<String>) -> Result<FilePayload, String> {
     let file_path = Path::new(&path);
+    let size = std::fs::metadata(file_path).map_err(|error| error.to_string())?.len();
+    if size > MAX_TEXT_FILE_BYTES {
+        return Err(format!(
+            "El documento ocupa {:.1} MB; el límite seguro para texto es 32 MB",
+            size as f64 / 1_048_576.0
+        ));
+    }
     let contents = std::fs::read_to_string(file_path).map_err(|error| error.to_string())?;
     let file_name = file_path
         .file_name()
