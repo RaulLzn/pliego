@@ -1,0 +1,70 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Pliego",
+  "version": "1.0.0",
+  "identifier": "com.raul.pliego",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev -- --host 0.0.0.0 --port 1420",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Pliego",
+        "width": 1360,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 680,
+        "resizable": true,
+        "decorations": false,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "rpm"
+    ],
+    "shortDescription": "Biblioteca documental visual para Linux",
+    "longDescription": "Pliego organiza, visualiza, conecta y edita documentos con asistencia local de IA.",
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown",
+          "mdown",
+          "mkd"
+        ],
+        "mimeType": "text/markdown",
+        "name": "Markdown"
+      },
+      {
+        "ext": [
+          "txt"
+        ],
+        "mimeType": "text/plain",
+        "name": "Texto plano"
+      },
+      {
+        "ext": ["pdf", "csv", "tsv", "docx", "epub", "mmd", "mermaid", "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
+        "name": "Documento visual"
+      }
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}
