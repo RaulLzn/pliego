@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -42,6 +42,7 @@ struct Runtime {
     stdin: Mutex<ChildStdin>,
     pending: Mutex<HashMap<u64, mpsc::Sender<Result<Value, String>>>>,
     scopes: Mutex<HashMap<String, MarkdownScope>>,
+    scope_order: Mutex<VecDeque<String>>,
     turns: Mutex<HashMap<String, String>>,
     next_id: AtomicU64,
     alive: AtomicBool,
@@ -64,8 +65,13 @@ impl Runtime {
             self.pending.lock().map_err(lock_error)?.remove(&id);
             return Err(error);
         }
-        rx.recv_timeout(Duration::from_secs(30))
-            .map_err(|_| format!("Codex no respondió a {method}"))?
+        match rx.recv_timeout(Duration::from_secs(30)) {
+            Ok(result) => result,
+            Err(_) => {
+                self.pending.lock().map_err(lock_error)?.remove(&id);
+                Err(format!("Codex no respondió a {method}"))
+            }
+        }
     }
 
     fn notify(&self, method: &str, params: Value) -> Result<(), String> {
@@ -155,6 +161,7 @@ impl CodexManager {
             stdin: Mutex::new(stdin),
             pending: Mutex::new(HashMap::new()),
             scopes: Mutex::new(HashMap::new()),
+            scope_order: Mutex::new(VecDeque::new()),
             turns: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
             alive: AtomicBool::new(true),
@@ -294,7 +301,14 @@ fn normalize_notification(runtime: &Runtime, app: &AppHandle, method: &str, para
             }
             json!({"type":"activity", "activity":"turnStarted", "data":params})
         }
-        "turn/completed" => json!({"type":"completed", "data":params}),
+        "turn/completed" => {
+            if let Some(thread) = params.get("threadId").and_then(Value::as_str) {
+                if let Ok(mut turns) = runtime.turns.lock() {
+                    turns.remove(thread);
+                }
+            }
+            json!({"type":"completed", "data":params})
+        }
         "item/started" | "item/completed" => {
             json!({"type":"toolActivity", "phase":method, "data":params})
         }
@@ -606,15 +620,30 @@ pub fn codex_open_context(
         .and_then(Value::as_str)
         .ok_or("Codex devolvió un thread inválido")?
         .to_string();
-    runtime.scopes.lock().map_err(lock_error)?.insert(
-        thread_id.clone(),
-        MarkdownScope {
-            root,
-            kind,
-            writable: request.writable,
-            related,
-        },
-    );
+    {
+        const MAX_SCOPES: usize = 64;
+        let mut scopes = runtime.scopes.lock().map_err(lock_error)?;
+        let mut order = runtime.scope_order.lock().map_err(lock_error)?;
+        order.retain(|id| id != &thread_id);
+        scopes.insert(
+            thread_id.clone(),
+            MarkdownScope {
+                root,
+                kind,
+                writable: request.writable,
+                related,
+            },
+        );
+        order.push_back(thread_id.clone());
+        while order.len() > MAX_SCOPES {
+            if let Some(expired) = order.pop_front() {
+                scopes.remove(&expired);
+                if let Ok(mut turns) = runtime.turns.lock() {
+                    turns.remove(&expired);
+                }
+            }
+        }
+    }
     Ok(
         json!({"threadId":thread_id,"resumed":resumed,"thread":result.get("thread"),"relatedCount":related_count}),
     )
@@ -741,14 +770,17 @@ pub fn codex_interrupt(manager: State<CodexManager>, thread_id: String) -> Resul
 
 #[tauri::command]
 pub fn codex_stop(manager: State<CodexManager>) -> Result<(), String> {
+    stop_runtime(&manager)
+}
+
+pub fn stop_runtime(manager: &CodexManager) -> Result<(), String> {
     if let Some(runtime) = manager.runtime.lock().map_err(lock_error)?.take() {
         runtime.alive.store(false, Ordering::SeqCst);
-        runtime
-            .child
-            .lock()
-            .map_err(lock_error)?
-            .kill()
-            .map_err(|error| error.to_string())?;
+        let mut child = runtime.child.lock().map_err(lock_error)?;
+        if child.try_wait().map_err(|error| error.to_string())?.is_none() {
+            child.kill().map_err(|error| error.to_string())?;
+        }
+        child.wait().map_err(|error| error.to_string())?;
     }
     Ok(())
 }

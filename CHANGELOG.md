@@ -2,6 +2,16 @@
 
 Todos los cambios relevantes de Pliego se documentan en este archivo. El proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-07-18
+
+### Rendimiento y estabilidad
+
+- Liberación completa de workers, páginas, canvas y observadores al cerrar o sustituir un PDF.
+- Cancelación segura de cargas obsoletas al cambiar rápidamente entre documentos.
+- Liberación garantizada de URLs Blob para imágenes cargadas, fallidas o canceladas.
+- Limpieza de solicitudes Codex vencidas, turnos completados y contextos antiguos.
+- Cierre y espera determinista del proceso Codex al detener o cerrar Pliego.
+
 ## [1.0.0] - 2026-07-18
 
 Primera versión pública de Pliego, una biblioteca documental visual y local para Linux construida con Tauri.
@@ -53,3 +63,4 @@ Primera versión pública de Pliego, una biblioteca documental visual y local pa
 - Cero vulnerabilidades conocidas en dependencias de producción al publicar esta versión.
 
 [1.0.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.0.0
+[1.0.1]: https://github.com/RaulLzn/pliego/releases/tag/v1.0.1

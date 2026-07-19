@@ -78,6 +78,7 @@ const state = {
   paletteMode: 'files',
   openTabs: [],
   language: localStorage.getItem(LANGUAGE_KEY) || 'es',
+  loadGeneration: 0,
 }
 
 document.querySelector('#app').innerHTML = `
@@ -1043,6 +1044,7 @@ async function loadInitialFile() {
 }
 
 async function loadBrowserFile(file) {
+  const generation = beginDocumentLoad()
   try {
     const markdown = await file.text()
     let html
@@ -1051,6 +1053,7 @@ async function loadBrowserFile(file) {
     } catch (_) {
       html = `<pre>${escapeHtml(markdown)}</pre>`
     }
+    if (!isCurrentLoad(generation)) return
     applyDocument(file.name, '', markdown, html)
     hideMessage()
   } catch (error) {
@@ -1063,11 +1066,12 @@ async function loadFileFromPath(path) {
     showMessage('Tienes cambios sin guardar. Guarda o vuelve a Lectura antes de abrir otro archivo.')
     return
   }
+  const generation = beginDocumentLoad()
   try {
     const entry = state.documentIndex.find((item) => item.path === path)
     const kind = entry?.kind || kindFromPath(path)
     if (!['markdown', 'text'].includes(kind)) {
-      await loadVisualFile(path, kind, entry)
+      await loadVisualFile(path, kind, entry, generation)
       return
     }
     const payload = await invoke('read_markdown_file', {
@@ -1077,18 +1081,32 @@ async function loadFileFromPath(path) {
     if (!payload || typeof payload !== 'object') {
       throw new Error('respuesta invalida')
     }
+    if (!isCurrentLoad(generation)) return
     applyDocument(payload.fileName, path, payload.contents, payload.html)
     state.documentKind = kind
     renderReferences()
     addRecent(path, payload.fileName)
     hideMessage()
   } catch (error) {
+    if (!isCurrentLoad(generation) || error?.name === 'AbortError') return
     showMessage(`No pude abrir el archivo seleccionado: ${formatError(error)}`)
   }
 }
 
-async function loadVisualFile(path, kind, entry) {
+function beginDocumentLoad() {
+  state.loadGeneration += 1
+  reader._visualCleanup?.()
+  reader._visualCleanup = null
+  return state.loadGeneration
+}
+
+function isCurrentLoad(generation) {
+  return generation === state.loadGeneration
+}
+
+async function loadVisualFile(path, kind, entry, generation) {
   const payload = await invoke('read_binary_document', { path })
+  if (!isCurrentLoad(generation)) return
   state.fileName = payload.fileName
   state.filePath = path
   state.documentKind = kind
@@ -1115,6 +1133,7 @@ async function loadVisualFile(path, kind, entry) {
   } else {
     info = await renderVisualDocument(reader, payload, path)
   }
+  if (!isCurrentLoad(generation)) return
   fileNameLabel.textContent = state.fileName
   metaInfo.textContent = info?.detail || kind
   toc.innerHTML = '<p class="muted">Este documento no usa encabezados Markdown.</p>'
@@ -1726,6 +1745,12 @@ async function listenTauriDragDrop() {
 // ---------- Render, indice y busqueda ----------
 
 void loadInitialFile()
+
+window.addEventListener('beforeunload', () => {
+  reader._visualCleanup?.()
+  reader._visualCleanup = null
+  void invoke('codex_stop').catch(() => {})
+})
 
 function decorateRenderedContent() {
   const headings = reader.querySelectorAll('h1, h2, h3, h4, h5, h6')

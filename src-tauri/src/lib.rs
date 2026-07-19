@@ -2,6 +2,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use pulldown_cmark::{html, Options, Parser};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use tauri::Manager;
 
 mod codex;
 
@@ -548,8 +549,14 @@ pub fn run() {
             codex::codex_interrupt,
             codex::codex_stop
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                let manager = app.state::<codex::CodexManager>();
+                let _ = codex::stop_runtime(&manager);
+            }
+        });
 }
 
 // build: resaltador + acento

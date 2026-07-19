@@ -25,13 +25,33 @@ async function renderPdf(reader, bytes) {
   ])
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default
   reader.innerHTML = '<div class="visual-loading">Preparando páginas…</div>'
-  const pdf = await pdfjs.getDocument({ data: bytes }).promise
+  const loadingTask = pdfjs.getDocument({ data: bytes })
+  let pdf
+  let disposed = false
+  const pages = []
+  let resizeTimer
+  let observer
+  reader._visualCleanup = () => {
+    if (disposed) return
+    disposed = true
+    observer?.disconnect()
+    clearTimeout(resizeTimer)
+    for (const item of pages) {
+      item.task?.cancel()
+      item.page?.cleanup()
+      item.canvas.width = 0
+      item.canvas.height = 0
+    }
+    void (pdf ? pdf.destroy() : loadingTask.destroy()).catch(() => {})
+  }
+  pdf = await loadingTask.promise
+  if (disposed) throw new DOMException('Carga cancelada', 'AbortError')
   const shell = document.createElement('div')
   shell.className = 'pdf-document'
   reader.innerHTML = ''
   reader.appendChild(shell)
-  const pages = []
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    if (disposed) throw new DOMException('Carga cancelada', 'AbortError')
     const page = await pdf.getPage(pageNumber)
     const canvas = document.createElement('canvas')
     canvas.className = 'pdf-page'
@@ -41,10 +61,12 @@ async function renderPdf(reader, bytes) {
   let drawing = false
   let redrawRequested = false
   const redraw = async () => {
+    if (disposed) return
     if (drawing) { redrawRequested = true; return }
     drawing = true
     const available = Math.max(280, shell.clientWidth || reader.clientWidth - 32)
     for (const item of pages) {
+      if (disposed) break
       item.task?.cancel()
       const base = item.page.getViewport({ scale: 1 })
       const cssWidth = Math.min(980, available)
@@ -58,16 +80,15 @@ async function renderPdf(reader, bytes) {
       try { await item.task.promise } catch (error) { if (error?.name !== 'RenderingCancelledException') throw error }
     }
     drawing = false
+    if (disposed) return
     if (redrawRequested) { redrawRequested = false; void redraw() }
   }
   await redraw()
-  let resizeTimer
-  const observer = new ResizeObserver(() => {
+  observer = new ResizeObserver(() => {
     clearTimeout(resizeTimer)
     resizeTimer = setTimeout(() => void redraw(), 120)
   })
   observer.observe(shell)
-  reader._visualCleanup = () => { observer.disconnect(); clearTimeout(resizeTimer); pages.forEach((item) => item.task?.cancel()) }
   return { words: 0, detail: `${pdf.numPages} páginas` }
 }
 
@@ -111,7 +132,20 @@ function renderImage(reader, bytes, path) {
   reader.innerHTML = '<div class="image-document"></div>'
   const image = new Image()
   image.alt = path.split('/').pop()
-  image.onload = () => URL.revokeObjectURL(url)
+  let revoked = false
+  const revoke = () => {
+    if (revoked) return
+    revoked = true
+    URL.revokeObjectURL(url)
+  }
+  image.onload = revoke
+  image.onerror = revoke
+  reader._visualCleanup = () => {
+    image.onload = null
+    image.onerror = null
+    image.src = ''
+    revoke()
+  }
   image.src = url
   reader.firstElementChild.appendChild(image)
   return { words: 0, detail: 'Imagen' }
