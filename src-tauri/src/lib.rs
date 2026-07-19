@@ -471,6 +471,7 @@ fn escape_markdown_label(label: &str) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
 
