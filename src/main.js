@@ -7,6 +7,7 @@ import hljs from 'highlight.js/lib/common'
 import TurndownService from 'turndown'
 import { gfm } from 'turndown-plugin-gfm'
 import { decodeBase64, renderMermaidBlocks, renderMermaidDocument, renderTableDocument, renderVisualDocument } from './document-renderers.js'
+import { createOnboarding, onboardingCompleted } from './onboarding.js'
 
 const THEME_KEY = 'pliego-theme'
 const RECENTS_KEY = 'pliego-recents'
@@ -274,6 +275,11 @@ document.querySelector('#app').innerHTML = `
           <span>Historial</span>
           <button id="clearRecents" class="ghost-button" type="button">Limpiar recientes</button>
         </div>
+
+        <div class="setting-row">
+          <span>Primeros pasos</span>
+          <button id="showOnboarding" class="ghost-button" type="button">Ver tutorial</button>
+        </div>
       </div>
     </div>
 
@@ -347,6 +353,7 @@ const referencesBox = $('#references')
 const referenceCount = $('#referenceCount')
 const documentTabs = $('#documentTabs')
 const libraryHome = $('#libraryHome')
+const onboarding = createOnboarding()
 const libraryGrid = $('#libraryGrid')
 const homeRecents = $('#homeRecents')
 const homeFavorites = $('#homeFavorites')
@@ -398,6 +405,7 @@ $('#tocToggle').addEventListener('click', () => tocOverlay.classList.toggle('hid
 $('#tocClose').addEventListener('click', () => tocOverlay.classList.add('hidden'))
 $('#settingsButton').addEventListener('click', () => settingsModal.classList.remove('hidden'))
 $('#settingsClose').addEventListener('click', () => settingsModal.classList.add('hidden'))
+$('#showOnboarding').addEventListener('click', () => onboarding.start())
 settingsModal.addEventListener('click', (event) => {
   if (event.target === settingsModal) {
     settingsModal.classList.add('hidden')
@@ -2013,6 +2021,8 @@ referencesBox.addEventListener('click', (event) => {
   const target = event.target.closest('[data-path]')
   if (target) void loadFileFromPath(target.dataset.path)
 })
+
+if (!onboardingCompleted()) window.setTimeout(() => onboarding.start(), 450)
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !commandPalette.classList.contains('hidden')) closePalette()

@@ -136,6 +136,115 @@ body {
   height: 100vh;
 }
 
+/* ---------- Tutorial interactivo ---------- */
+
+.onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.onboarding-shade {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+}
+
+.onboarding-centered .onboarding-shade {
+  background: rgba(3, 5, 9, 0.74);
+  backdrop-filter: blur(2px);
+}
+
+.onboarding-spotlight {
+  position: fixed;
+  top: var(--spotlight-top);
+  left: var(--spotlight-left);
+  width: var(--spotlight-width);
+  height: var(--spotlight-height);
+  z-index: 1;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(3, 5, 9, 0.74), 0 0 28px var(--accent-glow);
+  transition: top 180ms ease, left 180ms ease, width 180ms ease, height 180ms ease;
+}
+
+.onboarding-card {
+  position: fixed;
+  top: var(--onboarding-top, 50%);
+  left: var(--onboarding-left, 50%);
+  z-index: 2;
+  width: min(440px, calc(100vw - 32px));
+  padding: 22px;
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  outline: none;
+  background: var(--bg1);
+  color: var(--text-primary);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+}
+
+.onboarding-centered .onboarding-card {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.onboarding-meta,
+.onboarding-actions,
+.onboarding-actions > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.onboarding-meta {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.onboarding-meta span:last-child { color: var(--text-muted); }
+.onboarding-card h2 { margin: 14px 0 7px; font-size: 1.35rem; }
+.onboarding-card p { margin: 0; color: var(--text-secondary); line-height: 1.65; }
+.onboarding-actions { margin-top: 20px; }
+
+.onboarding-dots {
+  display: flex;
+  gap: 4px;
+  margin-top: 17px;
+}
+
+.onboarding-dots i {
+  width: 7px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border-light);
+  transition: width 160ms ease, background 160ms ease;
+}
+
+.onboarding-dots i.active { width: 20px; background: var(--accent); }
+
+@media (max-width: 680px) {
+  .onboarding-card {
+    top: auto !important;
+    right: 12px;
+    bottom: 12px;
+    left: 12px !important;
+    width: auto;
+    transform: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-spotlight,
+  .onboarding-dots i { transition: none; }
+}
+
 button,
 input,
 textarea {

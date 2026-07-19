@@ -2,6 +2,13 @@
 
 Todos los cambios relevantes de Pliego se documentan en este archivo. El proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [Sin publicar]
+
+### Experiencia inicial
+
+- Tutorial interactivo de primera apertura con recorrido por lectura, edición de Markdown, bibliotecas, búsqueda, pestañas, favoritos, índice, apariencia y Codex.
+- Acceso permanente para repetir el tutorial desde Configuración.
+
 ## [1.1.0] - 2026-07-18
 
 ### Documentos grandes
