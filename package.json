@@ -23,12 +23,12 @@
     "tauri:build": "tauri build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.0",
+    "@tauri-apps/cli": "^2.11.4",
     "vite": "^8.1.5"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.11.0",
-    "@tauri-apps/plugin-dialog": "^2.7.0",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
     "highlight.js": "^11.11.1",
     "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
