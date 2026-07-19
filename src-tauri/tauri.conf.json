@@ -28,10 +28,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "rpm"
-    ],
-    "shortDescription": "Biblioteca documental visual para Linux",
+    "targets": "all",
+    "publisher": "RaulLzn",
+    "copyright": "Copyright © 2026 RaulLzn",
+    "license": "MIT",
+    "homepage": "https://github.com/RaulLzn/pliego",
+    "shortDescription": "Biblioteca documental visual, rápida y local",
     "longDescription": "Pliego organiza, visualiza, conecta y edita documentos con asistencia local de IA.",
     "fileAssociations": [
       {

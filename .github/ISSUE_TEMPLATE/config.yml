@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/RaulLzn/pliego/security/advisories/new
+    about: Envía vulnerabilidades de forma privada.
+  - name: Soporte
+    url: https://github.com/RaulLzn/pliego/blob/main/SUPPORT.md
+    about: Consulta las opciones de soporte antes de abrir un issue.

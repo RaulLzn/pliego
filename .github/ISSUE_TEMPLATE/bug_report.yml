@@ -1,0 +1,44 @@
+name: Reporte de error
+description: Informa un problema reproducible en Pliego
+title: "[Bug]: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Gracias por ayudar a mejorar Pliego. No adjuntes documentos privados sin sanearlos.
+  - type: input
+    id: version
+    attributes:
+      label: Versión de Pliego
+      placeholder: 1.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Sistema operativo
+      options: [Fedora/RHEL, Ubuntu/Debian, Otro Linux, Windows, macOS]
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción
+      description: Qué ocurrió y qué esperabas que ocurriera.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para reproducirlo
+      placeholder: |
+        1. Abrir...
+        2. Seleccionar...
+        3. Observar...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs o capturas
+      description: Elimina rutas, nombres y contenido sensible antes de compartir.

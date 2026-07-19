@@ -12,6 +12,12 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 - Indexación de carpetas acotada a 2 MB de texto por archivo para evitar picos al explorar bibliotecas grandes.
 - Límites seguros y mensajes explícitos para documentos visuales mayores de 128 MB y textos mayores de 32 MB.
 
+### Proyecto
+
+- Repositorio público preparado con licencia MIT, guías de contribución, soporte y seguridad.
+- CI para compilación, tests, formato, lint y auditoría de dependencias.
+- Releases automatizadas para Linux, Windows y macOS a partir de tags semánticos.
+
 ## [1.0.1] - 2026-07-18
 
 ### Rendimiento y estabilidad

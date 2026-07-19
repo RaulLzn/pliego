@@ -1,12 +1,24 @@
 {
   "name": "pliego",
   "version": "1.1.0",
+  "description": "Biblioteca documental visual, rápida y local construida con Tauri.",
   "private": true,
+  "license": "MIT",
+  "homepage": "https://github.com/RaulLzn/pliego#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RaulLzn/pliego.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RaulLzn/pliego/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "check": "npm run build && cargo test --manifest-path src-tauri/Cargo.toml --locked",
+    "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

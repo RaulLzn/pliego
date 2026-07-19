@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PORTABLE_DIR="$APP_DIR/src-tauri/target/release/bundle/appimage/Pliego.AppDir"
-BINARIO="$APP_DIR/artifacts/Pliego"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RELEASE_BINARY="$PROJECT_DIR/src-tauri/target/release/app"
 
-if [[ -x "$PORTABLE_DIR/AppRun" ]]; then
-  exec "$PORTABLE_DIR/AppRun"
+if command -v pliego >/dev/null 2>&1; then
+  exec pliego "$@"
 fi
 
-exec "$BINARIO"
+if [[ -x "$RELEASE_BINARY" ]]; then
+  exec "$RELEASE_BINARY" "$@"
+fi
+
+echo "Pliego no está instalado ni compilado. Ejecuta 'npm ci && npm run tauri:dev'." >&2
+exit 1

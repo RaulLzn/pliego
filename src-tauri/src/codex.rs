@@ -777,7 +777,11 @@ pub fn stop_runtime(manager: &CodexManager) -> Result<(), String> {
     if let Some(runtime) = manager.runtime.lock().map_err(lock_error)?.take() {
         runtime.alive.store(false, Ordering::SeqCst);
         let mut child = runtime.child.lock().map_err(lock_error)?;
-        if child.try_wait().map_err(|error| error.to_string())?.is_none() {
+        if child
+            .try_wait()
+            .map_err(|error| error.to_string())?
+            .is_none()
+        {
             child.kill().map_err(|error| error.to_string())?;
         }
         child.wait().map_err(|error| error.to_string())?;
