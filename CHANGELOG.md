@@ -2,7 +2,7 @@
 
 Todos los cambios relevantes de Pliego se documentan en este archivo. El proyecto sigue [Semantic Versioning](https://semver.org/).
 
-## [Sin publicar]
+## [1.2.0] - 2026-07-18
 
 ### Experiencia inicial
 
@@ -88,3 +88,4 @@ Primera versión pública de Pliego, una biblioteca documental visual y local pa
 [1.0.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.0.0
 [1.0.1]: https://github.com/RaulLzn/pliego/releases/tag/v1.0.1
 [1.1.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.1.0
+[1.2.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.2.0
