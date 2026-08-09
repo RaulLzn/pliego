@@ -43,6 +43,7 @@ const ICONS = {
   library: '<svg viewBox="0 0 24 24"><path d="M4 4h5v16H4zM10 4h5v16h-5zM16 6l4-1 2 14-4 1z"/></svg>',
   star: '<svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/></svg>',
   edit: '<svg viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10zM13.5 6.5 17 10"/></svg>',
+  inbox: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 14h5l2 3h2l2-3h5"/></svg>',
 }
 const icon = (name) => `<span class="animated-icon" aria-hidden="true">${ICONS[name]}</span>`
 
@@ -75,10 +76,12 @@ const state = {
   codexItemPhases: {},
   codexFinalMarkdown: '',
   documentIndex: [],
+  treeNodes: [],
   documentKind: 'markdown',
   paletteMode: 'files',
   openTabs: [],
   language: localStorage.getItem(LANGUAGE_KEY) || 'es',
+  visualInfo: null,
   loadGeneration: 0,
 }
 
@@ -87,30 +90,32 @@ document.querySelector('#app').innerHTML = `
     <div class="window-titlebar" data-tauri-drag-region>
       <div class="window-title" data-tauri-drag-region><img src="/pliego-icon.png" alt="" /> Pliego</div>
       <div class="window-controls">
-        <button id="windowMinimize" type="button" aria-label="Minimizar">−</button>
-        <button id="windowMaximize" type="button" aria-label="Maximizar">□</button>
-        <button id="windowClose" class="close" type="button" aria-label="Cerrar">×</button>
+        <button id="windowMinimize" type="button" data-i18n-aria="minimize" aria-label="Minimizar">−</button>
+        <button id="windowMaximize" type="button" data-i18n-aria="maximize" aria-label="Maximizar">□</button>
+        <button id="windowClose" class="close" type="button" data-i18n-aria="close" aria-label="Cerrar">×</button>
       </div>
     </div>
     <header class="topbar">
       <div class="brand">
-        <button id="sidebarToggle" class="tool-button" type="button" aria-label="Mostrar u ocultar panel" data-tooltip="Panel lateral">${icon('menu')}</button>
-        <button id="homeButton" class="brand-mark" type="button" aria-label="Bibliotecas" data-tooltip="Bibliotecas"><img src="/pliego-icon.png" alt="" /></button>
+        <button id="sidebarToggle" class="tool-button" type="button" data-i18n-aria="sidebarToggle" data-i18n-tooltip="sidebarTooltip" aria-label="Mostrar u ocultar panel" data-tooltip="Panel lateral">${icon('menu')}</button>
+        <button id="homeButton" class="brand-mark" type="button" data-i18n-aria="libraries" data-i18n-tooltip="libraries" aria-label="Bibliotecas" data-tooltip="Bibliotecas"><img src="/pliego-icon.png" alt="" /></button>
         <div class="brand-text">
-          <p class="eyebrow">Biblioteca documental</p>
+          <p class="eyebrow" data-i18n="brandEyebrow">Biblioteca documental</p>
           <h1>Pliego</h1>
         </div>
       </div>
 
       <div class="toolbar">
         <div class="tool-cluster">
-          <button id="openButton" class="tool-button accent" type="button" aria-label="Abrir archivo" data-tooltip="Abrir archivo">${icon('file')}</button>
-          <button id="openFolderButton" class="tool-button" type="button" aria-label="Abrir carpeta" data-tooltip="Abrir carpeta">${icon('folder')}</button>
-          <button id="folderSearchButton" class="tool-button" type="button" aria-label="Buscar en carpeta" data-tooltip="Buscar en carpeta · Ctrl+Shift+F">${icon('search')}</button>
-          <button id="quickOpenButton" class="tool-button" type="button" aria-label="Apertura rápida" data-tooltip="Apertura rápida · Ctrl+P">${icon('command')}</button>
+          <button id="openButton" class="tool-button accent" type="button" data-i18n-aria="openFile" data-i18n-tooltip="openFile" aria-label="Abrir archivo" data-tooltip="Abrir archivo">${icon('file')}</button>
+          <button id="openFolderButton" class="tool-button" type="button" data-i18n-aria="openFolder" data-i18n-tooltip="openFolder" aria-label="Abrir carpeta" data-tooltip="Abrir carpeta">${icon('folder')}</button>
+          <button id="newNoteButton" class="tool-button" type="button" data-i18n-aria="newNote" data-i18n-tooltip="newNoteTooltip" aria-label="Nueva página Markdown" data-tooltip="Nueva página · Ctrl+N">${icon('plus')}</button>
+          <button id="folderSearchButton" class="tool-button" type="button" data-i18n-aria="folderSearch" data-i18n-tooltip="folderSearch" aria-label="Buscar en carpeta" data-tooltip="Buscar en carpeta · Ctrl+Shift+F">${icon('search')}</button>
+          <button id="quickOpenButton" class="tool-button" type="button" data-i18n-aria="quickOpen" data-i18n-tooltip="quickOpen" aria-label="Apertura rápida" data-tooltip="Apertura rápida · Ctrl+P">${icon('command')}</button>
+          <button id="quickCaptureButton" class="tool-button inbox-tool" type="button" data-i18n-aria="quickCapture" data-i18n-tooltip="quickCaptureTooltip" aria-label="Captura rápida" data-tooltip="Captura rápida · Ctrl+Alt+Space">${icon('inbox')}<span id="inboxToolbarBadge" class="inbox-badge hidden">0</span></button>
         </div>
         <label class="search">
-          <span class="search-label">Buscar</span>
+          <span class="search-label" data-i18n="searchLabel">Buscar</span>
           <input id="searchInput" type="search" placeholder="Titulos, texto, codigo..." />
           <span id="searchStats" class="search-stats">0</span>
         </label>
@@ -120,15 +125,15 @@ document.querySelector('#app').innerHTML = `
         </div>
         <button id="saveButton" class="ghost-button hidden" type="button">Guardar</button>
         <div class="tool-cluster">
-          <button id="codexToggle" class="tool-button ai-button" type="button" aria-label="Codex AI" data-tooltip="Asistente Codex">${icon('ai')}</button>
-          <button id="favoriteToggle" class="tool-button" type="button" aria-label="Añadir a favoritos" data-tooltip="Añadir a favoritos">${icon('star')}</button>
-          <button id="tocToggle" class="tool-button" type="button" aria-label="Indice" data-tooltip="Índice">${icon('toc')}</button>
-          <button id="settingsButton" class="tool-button" type="button" aria-label="Configuraciones" data-tooltip="Configuración">${icon('settings')}</button>
+          <button id="codexToggle" class="tool-button ai-button" type="button" data-i18n-aria="codex" data-i18n-tooltip="assistant" aria-label="Codex AI" data-tooltip="Asistente Codex">${icon('ai')}</button>
+          <button id="favoriteToggle" class="tool-button" type="button" data-i18n-aria="favoriteAdd" aria-label="Añadir a favoritos" data-tooltip="Añadir a favoritos">${icon('star')}</button>
+          <button id="tocToggle" class="tool-button" type="button" data-i18n-aria="index" data-i18n-tooltip="index" aria-label="Indice" data-tooltip="Índice">${icon('toc')}</button>
+          <button id="settingsButton" class="tool-button" type="button" data-i18n-aria="settings" data-i18n-tooltip="settings" aria-label="Configuraciones" data-tooltip="Configuración">${icon('settings')}</button>
         </div>
       </div>
     </header>
 
-    <div id="documentTabs" class="document-tabs" aria-label="Archivos abiertos"></div>
+    <div id="documentTabs" class="document-tabs" data-i18n-aria="openTabs" aria-label="Archivos abiertos"></div>
 
     <input id="fileInput" type="file" accept=".md,.markdown,.mdown,.mkd,.txt,.csv,.tsv,.pdf,.docx,.epub,.png,.jpg,.jpeg,.gif,.webp,.svg,.bmp,.mmd,.mermaid" hidden />
 
@@ -166,7 +171,7 @@ document.querySelector('#app').innerHTML = `
       <section class="reader-wrap">
         <div id="messageBar" class="message-bar hidden" role="status" aria-live="polite"></div>
         <div id="dropzone" class="dropzone">
-          <p>Arrastra aqui tu archivo .md o usa el boton de arriba.</p>
+          <p data-i18n="dropzone">Arrastra aqui tu archivo .md o usa el boton de arriba.</p>
         </div>
         <article id="reader" class="reader empty">
           <div class="empty-state">
@@ -180,49 +185,49 @@ document.querySelector('#app').innerHTML = `
           <span class="hl-icon" aria-hidden="true">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>
           </span>
-          <button class="hl-dot" data-hl="yellow" type="button" aria-label="Resaltar amarillo"></button>
-          <button class="hl-dot" data-hl="green" type="button" aria-label="Resaltar verde"></button>
-          <button class="hl-dot" data-hl="pink" type="button" aria-label="Resaltar rosa"></button>
-          <button class="hl-dot" data-hl="blue" type="button" aria-label="Resaltar azul"></button>
-          <button class="hl-dot remove" data-hl="remove" type="button" aria-label="Quitar resaltado">✕</button>
+          <button class="hl-dot" data-hl="yellow" data-i18n-aria="highlightYellow" type="button" aria-label="Resaltar amarillo"></button>
+          <button class="hl-dot" data-hl="green" data-i18n-aria="highlightGreen" type="button" aria-label="Resaltar verde"></button>
+          <button class="hl-dot" data-hl="pink" data-i18n-aria="highlightPink" type="button" aria-label="Resaltar rosa"></button>
+          <button class="hl-dot" data-hl="blue" data-i18n-aria="highlightBlue" type="button" aria-label="Resaltar azul"></button>
+          <button class="hl-dot remove" data-hl="remove" data-i18n-aria="removeHighlight" type="button" aria-label="Quitar resaltado">✕</button>
         </div>
       </section>
     </main>
 
     <aside id="tocOverlay" class="toc-overlay hidden">
-      <div class="panel-row toc-overlay-head">
-        <p class="panel-label">Indice</p>
-        <span id="tocCount" class="muted">0 secciones</span>
-        <button id="tocClose" class="icon-button small" type="button" aria-label="Cerrar indice">✕</button>
+        <div class="panel-row toc-overlay-head">
+        <p class="panel-label" data-i18n="index">Indice</p>
+        <span id="tocCount" class="muted" data-i18n="tocSections">0 secciones</span>
+        <button id="tocClose" class="icon-button small" type="button" data-i18n-aria="closeIndex" aria-label="Cerrar indice">✕</button>
       </div>
       <nav id="toc" class="toc">
-        <p class="muted">El indice aparecera aqui.</p>
+        <p class="muted" data-i18n="tocEmpty">El indice aparecera aqui.</p>
       </nav>
     </aside>
 
-    <aside id="codexPanel" class="codex-panel hidden" aria-label="Chat con Codex">
+    <aside id="codexPanel" class="codex-panel hidden" data-i18n-aria="codexChat" aria-label="Chat con Codex">
       <div class="codex-head">
-        <div><p class="panel-label">Asistente local</p><h2>Codex</h2></div>
-        <span id="codexStatus" class="codex-status">Desconectado</span>
-        <button id="codexClose" class="icon-button small" type="button" aria-label="Cerrar Codex">✕</button>
+        <div><p class="panel-label" data-i18n="localAssistant">Asistente local</p><h2>Codex</h2></div>
+        <span id="codexStatus" class="codex-status" data-i18n="disconnected">Desconectado</span>
+        <button id="codexClose" class="icon-button small" type="button" data-i18n-aria="closeCodex" aria-label="Cerrar Codex">✕</button>
       </div>
-      <p id="codexNotice" class="codex-notice">Abre un Markdown para iniciar la conversación.</p>
+      <p id="codexNotice" class="codex-notice" data-i18n="codexNotice">Abre un Markdown para iniciar la conversación.</p>
       <div id="codexMessages" class="codex-messages" aria-live="polite"></div>
       <form id="codexForm" class="codex-form">
-        <textarea id="codexInput" rows="3" placeholder="Pregunta sobre el Markdown…"></textarea>
+        <textarea id="codexInput" rows="3" data-i18n-placeholder="codexInputPlaceholder" placeholder="Pregunta sobre el Markdown…"></textarea>
         <details id="codexOptions" class="codex-options">
-          <summary><span class="codex-options-dot" aria-hidden="true"></span><span id="codexOptionsSummary">Modelo y esfuerzo</span><span class="codex-chevron">⌄</span></summary>
+          <summary><span class="codex-options-dot" aria-hidden="true"></span><span id="codexOptionsSummary" data-i18n="modelAndEffort">Modelo y esfuerzo</span><span class="codex-chevron">⌄</span></summary>
           <div class="codex-controls">
-            <label><span>Modelo</span><select id="codexModel"><option value="">Cargando…</option></select></label>
-            <label><span>Esfuerzo</span><select id="codexEffort"><option value="">Predeterminado</option></select></label>
-            <label><span>Contexto</span><select id="codexContext"><option value="document">Markdown + referencias</option><option value="folder">Toda la carpeta</option></select></label>
-            <label><span>Permisos</span><select id="codexPermission"><option value="read">Solo lectura</option><option value="write">Editar Markdown</option></select></label>
+            <label><span data-i18n="model">Modelo</span><select id="codexModel"><option value="" data-i18n="loading">Cargando…</option></select></label>
+            <label><span data-i18n="effort">Esfuerzo</span><select id="codexEffort"><option value="" data-i18n="default">Predeterminado</option></select></label>
+            <label><span data-i18n="context">Contexto</span><select id="codexContext"><option value="document" data-i18n="documentContext">Markdown + referencias</option><option value="folder" data-i18n="folderContext">Toda la carpeta</option></select></label>
+            <label><span data-i18n="permissions">Permisos</span><select id="codexPermission"><option value="read" data-i18n="readOnly">Solo lectura</option><option value="write" data-i18n="writeMarkdown">Editar Markdown</option></select></label>
           </div>
         </details>
-        <label class="codex-web"><input id="codexWeb" type="checkbox" /> Permitir búsqueda web en este mensaje</label>
+        <label class="codex-web"><input id="codexWeb" type="checkbox" /> <span data-i18n="allowWeb">Permitir búsqueda web en este mensaje</span></label>
         <div class="codex-actions">
-          <button id="codexCancel" class="ghost-button hidden" type="button">Cancelar</button>
-          <button id="codexSend" class="primary-button" type="submit">Enviar</button>
+          <button id="codexCancel" class="ghost-button hidden" type="button" data-i18n="cancel">Cancelar</button>
+          <button id="codexSend" class="primary-button" type="submit" data-i18n="send">Enviar</button>
         </div>
       </form>
     </aside>
@@ -230,20 +235,20 @@ document.querySelector('#app').innerHTML = `
     <div id="settingsModal" class="modal-backdrop hidden">
       <div class="modal">
         <div class="panel-row">
-          <p class="panel-label">Configuraciones</p>
-          <button id="settingsClose" class="icon-button small" type="button" aria-label="Cerrar">✕</button>
+          <p class="panel-label" data-i18n="settingsTitle">Configuraciones</p>
+          <button id="settingsClose" class="icon-button small" type="button" data-i18n-aria="close" aria-label="Cerrar">✕</button>
         </div>
 
         <div class="setting-row">
-          <span>Tema</span>
+          <span data-i18n="theme">Tema</span>
           <div class="btn-group mode-group">
-            <button class="mode-button" data-set-theme="light" type="button">Claro</button>
-            <button class="mode-button" data-set-theme="dark" type="button">Oscuro</button>
+            <button class="mode-button" data-set-theme="light" data-i18n="light" type="button">Claro</button>
+            <button class="mode-button" data-set-theme="dark" data-i18n="dark" type="button">Oscuro</button>
           </div>
         </div>
 
         <div class="setting-row">
-          <span>Tamano de letra</span>
+          <span data-i18n="fontSize">Tamano de letra</span>
           <div class="btn-group">
             <button id="fontMinus" class="icon-button" type="button">A−</button>
             <span id="scaleLabel" class="scale-label">100%</span>
@@ -252,18 +257,18 @@ document.querySelector('#app').innerHTML = `
         </div>
 
         <div class="setting-row">
-          <span>Color de acento</span>
+          <span data-i18n="accentColor">Color de acento</span>
           <div class="accent-swatches">
-            <button class="accent-dot" data-set-accent="#d4962a" style="background:#d4962a" type="button" aria-label="Dorado"></button>
-            <button class="accent-dot" data-set-accent="#2ab5a8" style="background:#2ab5a8" type="button" aria-label="Teal"></button>
-            <button class="accent-dot" data-set-accent="#e06452" style="background:#e06452" type="button" aria-label="Coral"></button>
-            <button class="accent-dot" data-set-accent="#38b37e" style="background:#38b37e" type="button" aria-label="Verde"></button>
-            <button class="accent-dot" data-set-accent="#8b7fd4" style="background:#8b7fd4" type="button" aria-label="Purpura"></button>
+            <button class="accent-dot" data-set-accent="#d4962a" data-i18n-aria="gold" style="background:#d4962a" type="button" aria-label="Dorado"></button>
+            <button class="accent-dot" data-set-accent="#2ab5a8" data-i18n-aria="teal" style="background:#2ab5a8" type="button" aria-label="Teal"></button>
+            <button class="accent-dot" data-set-accent="#e06452" data-i18n-aria="coral" style="background:#e06452" type="button" aria-label="Coral"></button>
+            <button class="accent-dot" data-set-accent="#38b37e" data-i18n-aria="green" style="background:#38b37e" type="button" aria-label="Verde"></button>
+            <button class="accent-dot" data-set-accent="#8b7fd4" data-i18n-aria="purple" style="background:#8b7fd4" type="button" aria-label="Purpura"></button>
           </div>
         </div>
 
         <div class="setting-row">
-          <span>Fuente de lectura</span>
+          <span data-i18n="readerFont">Fuente de lectura</span>
           <div class="btn-group mode-group">
             <button class="mode-button" data-set-font="serif" type="button">Serif</button>
             <button class="mode-button" data-set-font="sans" type="button">Sans</button>
@@ -272,38 +277,80 @@ document.querySelector('#app').innerHTML = `
         </div>
 
         <div class="setting-row">
-          <span>Historial</span>
-          <button id="clearRecents" class="ghost-button" type="button">Limpiar recientes</button>
+          <span data-i18n="history">Historial</span>
+          <button id="clearRecents" class="ghost-button" data-i18n="clearRecents" type="button">Limpiar recientes</button>
+        </div>
+
+        <div class="setting-row inbox-setting-row">
+          <span data-i18n="globalCapture">Captura global</span>
+          <div class="inbox-setting-control"><input id="inboxShortcutInput" class="setting-input" value="Ctrl+Alt+Space" data-i18n-aria="inboxShortcut" aria-label="Atajo global del Inbox" /><button id="inboxShortcutSave" class="ghost-button" data-i18n="saveShortcut" type="button">Guardar atajo</button></div>
+        </div>
+
+        <div class="setting-row inbox-setting-row">
+          <span data-i18n="inboxFolder">Carpeta Inbox</span>
+          <div class="inbox-setting-control"><small id="inboxSettingsFolder" class="setting-path" data-i18n="notConfigured">Sin configurar</small><button id="inboxSettingsFolderChoose" class="ghost-button" data-i18n="changeFolder" type="button">Cambiar carpeta</button></div>
         </div>
 
         <div class="setting-row">
-          <span>Primeros pasos</span>
-          <button id="showOnboarding" class="ghost-button" type="button">Ver tutorial</button>
+          <span data-i18n="gettingStarted">Primeros pasos</span>
+          <button id="showOnboarding" class="ghost-button" data-i18n="showTutorial" type="button">Ver tutorial</button>
         </div>
       </div>
     </div>
 
     <div id="commandPalette" class="palette-backdrop hidden">
-      <section class="command-palette" role="dialog" aria-modal="true" aria-label="Paleta de comandos">
-        <div class="palette-input-row"><span id="paletteIcon">⌘</span><input id="paletteInput" autocomplete="off" placeholder="Abrir archivo…" /><kbd>Esc</kbd></div>
-        <div id="paletteHint" class="palette-hint">Escribe para filtrar los documentos de la carpeta</div>
+      <section class="command-palette" role="dialog" aria-modal="true" data-i18n-aria="commandPalette" aria-label="Paleta de comandos">
+        <div class="palette-input-row"><span id="paletteIcon">⌘</span><input id="paletteInput" autocomplete="off" data-i18n-placeholder="paletteOpenPlaceholder" placeholder="Abrir archivo…" /><kbd>Esc</kbd></div>
+        <div id="paletteHint" class="palette-hint" data-i18n="paletteHint">Escribe para filtrar los documentos de la carpeta</div>
         <div id="paletteResults" class="palette-results"></div>
+      </section>
+    </div>
+
+    <div id="newNoteModal" class="modal-backdrop hidden">
+      <form id="newNoteForm" class="modal new-note-modal" aria-labelledby="newNoteTitle">
+        <div class="panel-row"><div><p class="panel-label" data-i18n="newPageLabel">NUEVA PÁGINA</p><h2 id="newNoteTitle" data-i18n="createMarkdown">Crear Markdown</h2></div><button id="newNoteClose" class="icon-button small" type="button" data-i18n-aria="close" aria-label="Cerrar">✕</button></div>
+        <label class="new-note-field"><span data-i18n="title">Título</span><input id="newNoteInput" maxlength="120" autocomplete="off" data-i18n-placeholder="titlePlaceholder" placeholder="Idea sobre el proyecto" /></label>
+        <div class="new-note-destination"><span data-i18n="createdIn">Se creará en</span><strong id="newNotePath"></strong></div>
+        <p id="newNoteError" class="new-note-error hidden" role="alert"></p>
+        <div class="new-note-actions"><button id="newNoteCancel" class="ghost-button" data-i18n="cancel" type="button">Cancelar</button><button id="newNoteCreate" class="primary-button" data-i18n="createAndEdit" type="submit">Crear y editar</button></div>
+      </form>
+    </div>
+
+    <div id="quickCapture" class="quick-capture-backdrop hidden">
+      <section class="quick-capture" role="dialog" aria-modal="true" aria-labelledby="quickCaptureTitle">
+        <div class="quick-capture-head"><div>${icon('inbox')}<span><p class="panel-label" data-i18n="quickCaptureLabel">CAPTURA RÁPIDA</p><h2 id="quickCaptureTitle" data-i18n="quickCaptureTitle">Guarda lo que tienes en mente</h2></span></div><button id="quickCaptureClose" class="icon-button small" type="button" data-i18n-aria="close" aria-label="Cerrar">✕</button></div>
+        <textarea id="quickCaptureInput" rows="5" data-i18n-placeholder="quickCapturePlaceholder" placeholder="Escribe o pega texto, una URL o una idea…"></textarea>
+        <div class="quick-capture-secondary"><button id="quickCaptureClipboard" class="ghost-button" data-i18n="captureClipboard" type="button">Capturar portapapeles</button><button id="quickCaptureFile" class="ghost-button" data-i18n="addFile" type="button">Añadir archivo</button></div>
+        <div class="quick-capture-actions"><span data-i18n="quickCaptureHint">Enter guarda · Shift+Enter crea una línea · Esc cierra</span><button id="quickCaptureSave" class="primary-button" type="button" data-i18n="capture">Capturar</button></div>
+      </section>
+    </div>
+
+    <div id="inboxView" class="inbox-view hidden">
+      <section class="inbox-shell" aria-labelledby="inboxTitle">
+        <header class="inbox-header"><div class="inbox-title-icon">${icon('inbox')}</div><div><p class="eyebrow" data-i18n="inboxWorkspace">ESPACIO DE CAPTURA</p><h2 id="inboxTitle" data-i18n="inboxTitle">Inbox</h2><p id="inboxFolderLabel" class="muted"></p></div><div class="inbox-header-actions"><button id="inboxCapture" class="primary-button" type="button" data-i18n="newCapture">Nueva captura</button><button id="inboxClose" class="tool-button" type="button" data-i18n-aria="close" aria-label="Cerrar">✕</button></div></header>
+        <div id="inboxSetup" class="inbox-setup hidden"><div>${icon('folder')}<span><strong data-i18n="chooseInbox">Elige una carpeta para tu Inbox</strong><small data-i18n="chooseInboxHint">Las capturas serán archivos locales normales, siempre bajo tu control.</small></span></div><button id="inboxChooseFolder" class="primary-button" type="button" data-i18n="chooseFolder">Elegir carpeta</button></div>
+        <div id="inboxContent" class="inbox-content hidden">
+          <aside class="inbox-list-pane"><div class="inbox-list-head"><span id="inboxCount" class="muted"></span><div><button id="inboxImport" class="ghost-button" type="button" data-i18n="importFiles">Importar archivos</button><button id="inboxChangeFolder" class="icon-button small" type="button" data-i18n-aria="changeFolder" data-i18n-tooltip="changeFolder" data-tooltip="Cambiar carpeta" aria-label="Cambiar carpeta">${icon('folder')}</button></div></div><div id="inboxList" class="inbox-list" role="listbox" data-i18n-aria="captures" aria-label="Capturas"></div></aside>
+          <main id="inboxPreview" class="inbox-preview"><div class="inbox-empty"><span>${icon('inbox')}</span><h3 data-i18n="selectCapture">Selecciona una captura</h3><p data-i18n="selectCaptureHint">Aquí podrás revisar y procesar lo que guardaste.</p></div></main>
+        </div>
       </section>
     </div>
 
     <div id="libraryHome" class="library-home hidden">
       <div class="library-home-shell">
-        <header class="library-hero"><div class="library-logo">${icon('library')}</div><div><p class="eyebrow" data-i18n="workspace">ESPACIO DE TRABAJO</p><h2 data-i18n="libraries">Tus bibliotecas</h2><p data-i18n="librariesLead">Organiza carpetas de documentos y entra con un clic.</p></div><button id="libraryHomeClose" class="tool-button" type="button" aria-label="Cerrar">✕</button></header>
+        <header class="library-hero"><div class="library-logo">${icon('library')}</div><div><p class="eyebrow" data-i18n="workspace">ESPACIO DE TRABAJO</p><h2 data-i18n="libraries">Tus bibliotecas</h2><p data-i18n="librariesLead">Organiza carpetas de documentos y entra con un clic.</p></div><button id="libraryHomeClose" class="tool-button" type="button" data-i18n-aria="close" aria-label="Cerrar">✕</button></header>
         <button id="addLibraryButton" class="add-library-card" type="button">${icon('plus')}<span><strong data-i18n="addLibrary">Añadir biblioteca</strong><small data-i18n="addLibraryHint">Selecciona una carpeta de tu equipo</small></span></button>
+        <button id="homeInboxCard" class="home-inbox-card" type="button">${icon('inbox')}<span><strong data-i18n="inboxTitle">Inbox</strong><small data-i18n="inboxHomeHint">Captura ahora, organiza después.</small></span><b id="homeInboxCount">0</b><i>→</i></button>
         <div class="home-dashboard"><main class="home-primary">
-          <div class="home-section-head"><div><p class="panel-label">Colecciones</p><h3>Bibliotecas</h3></div><div class="sort-control"><span>Ordenar por</span><details id="librarySort" class="life-select"><summary><span id="librarySortLabel">Más reciente</span><i>⌄</i></summary><div class="life-select-menu"><button data-sort="recent" type="button">Más reciente</button><button data-sort="name" type="button">Nombre</button><button data-sort="color" type="button">Color</button></div></details></div></div>
+          <div class="home-section-head"><div><p class="panel-label" data-i18n="collections">Colecciones</p><h3 data-i18n="libraries">Bibliotecas</h3></div><div class="sort-control"><span data-i18n="sortBy">Ordenar por</span><details id="librarySort" class="life-select"><summary><span id="librarySortLabel" data-i18n="mostRecent">Más reciente</span><i>⌄</i></summary><div class="life-select-menu"><button data-sort="recent" data-i18n="mostRecent" type="button">Más reciente</button><button data-sort="name" data-i18n="name" type="button">Nombre</button><button data-sort="color" data-i18n="color" type="button">Color</button></div></details></div></div>
           <div id="libraryGrid" class="library-grid"></div>
-          <div class="home-section-head"><div><p class="panel-label">Acceso rápido</p><h3>Favoritos</h3></div></div><div id="homeFavorites" class="home-file-row"></div>
-        </main><aside class="home-recent-column"><div class="home-section-head"><div><p class="panel-label">Actividad</p><h3>Recientes</h3></div></div><div id="homeRecents" class="home-file-row"></div></aside></div>
+          <div class="home-section-head"><div><p class="panel-label" data-i18n="quickAccess">Acceso rápido</p><h3 data-i18n="favorites">Favoritos</h3></div></div><div id="homeFavorites" class="home-file-row"></div>
+        </main><aside class="home-recent-column"><div class="home-section-head"><div><p class="panel-label" data-i18n="activity">Actividad</p><h3 data-i18n="recent">Recientes</h3></div></div><div id="homeRecents" class="home-file-row"></div></aside></div>
         <footer class="library-footer"><div class="sort-control"><span data-i18n="language">Idioma</span><details id="languageSelect" class="life-select"><summary><span id="languageLabel">Español</span><i>⌄</i></summary><div class="life-select-menu"><button data-language="es" type="button">Español</button><button data-language="en" type="button">English</button></div></details></div></footer>
       </div>
     </div>
-    <div id="libraryEditor" class="modal-backdrop hidden"><section class="library-editor modal"><div class="panel-row"><div><p class="panel-label">Editar biblioteca</p><h2 id="libraryEditorName"></h2></div><button id="libraryEditorClose" class="icon-button small" type="button">✕</button></div><p class="editor-label">Color</p><div id="libraryColors" class="library-color-grid"></div><p class="editor-label">Icono opcional</p><div id="libraryIcons" class="library-icon-grid"></div><div class="library-editor-actions"><button id="libraryEditorSave" class="primary-button" type="button">Guardar cambios</button></div></section></div>
+    <div id="libraryEditor" class="modal-backdrop hidden"><section class="library-editor modal"><div class="panel-row"><div><p class="panel-label" data-i18n="editLibrary">Editar biblioteca</p><h2 id="libraryEditorName"></h2></div><button id="libraryEditorClose" class="icon-button small" data-i18n-aria="close" type="button">✕</button></div><p class="editor-label" data-i18n="color">Color</p><div id="libraryColors" class="library-color-grid"></div><p class="editor-label" data-i18n="optionalIcon">Icono opcional</p><div id="libraryIcons" class="library-icon-grid"></div><div class="library-editor-actions"><button id="libraryEditorSave" class="primary-button" data-i18n="saveChanges" type="button">Guardar cambios</button></div></section></div>
+    <div id="fileContextMenu" class="file-context-menu hidden" role="menu"><button id="openFileInFolderButton" type="button" role="menuitem" data-i18n="openInFolder">Abrir en carpeta</button></div>
   </div>
 `
 
@@ -359,6 +406,24 @@ const homeRecents = $('#homeRecents')
 const homeFavorites = $('#homeFavorites')
 const favoriteToggle = $('#favoriteToggle')
 const libraryEditor = $('#libraryEditor')
+const newNoteModal = $('#newNoteModal')
+const newNoteInput = $('#newNoteInput')
+const newNotePath = $('#newNotePath')
+const newNoteError = $('#newNoteError')
+let newNotePreviousFocus = null
+const quickCapture = $('#quickCapture')
+const quickCaptureInput = $('#quickCaptureInput')
+const inboxView = $('#inboxView')
+const inboxList = $('#inboxList')
+const inboxPreview = $('#inboxPreview')
+const fileContextMenu = $('#fileContextMenu')
+const openFileInFolderButton = $('#openFileInFolderButton')
+let inboxConfig = { folder: '' }
+let inboxItems = []
+let selectedInboxPath = ''
+let inboxPreviewRequest = 0
+let quickCapturePreviousFocus = null
+let fileContextMenuPath = ''
 
 // ---------- Preferencias ----------
 
@@ -418,6 +483,52 @@ $('#clearRecents').addEventListener('click', () => {
   renderRecents()
 })
 
+$('#quickCaptureButton').addEventListener('click', openQuickCapture)
+$('#quickCaptureClose').addEventListener('click', closeQuickCapture)
+$('#quickCaptureSave').addEventListener('click', () => void saveQuickCapture())
+$('#quickCaptureClipboard').addEventListener('click', () => void captureInboxClipboard())
+$('#quickCaptureFile').addEventListener('click', () => void importInboxFiles(true))
+quickCapture.addEventListener('click', (event) => { if (event.target === quickCapture) closeQuickCapture() })
+quickCaptureInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') { event.preventDefault(); closeQuickCapture() }
+  if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void saveQuickCapture() }
+})
+$('#homeInboxCard').addEventListener('click', () => void openInbox())
+$('#inboxClose').addEventListener('click', () => inboxView.classList.add('hidden'))
+$('#inboxCapture').addEventListener('click', openQuickCapture)
+$('#inboxChooseFolder').addEventListener('click', () => void chooseInboxFolder())
+$('#inboxChangeFolder').addEventListener('click', () => void chooseInboxFolder())
+$('#inboxImport').addEventListener('click', () => void importInboxFiles())
+$('#inboxSettingsFolderChoose').addEventListener('click', () => void chooseInboxFolder())
+$('#inboxShortcutSave').addEventListener('click', () => void saveInboxShortcut())
+inboxList.addEventListener('click', (event) => {
+  const item = event.target.closest('[data-inbox-path]')
+  if (item) selectInboxItem(item.dataset.inboxPath)
+})
+inboxList.addEventListener('keydown', (event) => {
+  if (!inboxItems.length) return
+  const current = Math.max(0, inboxItems.findIndex((item) => item.path === selectedInboxPath))
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+    event.preventDefault()
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? inboxItems.length - 1 : Math.max(0, Math.min(inboxItems.length - 1, current + (event.key === 'ArrowDown' ? 1 : -1)))
+    selectInboxItem(inboxItems[next].path, true)
+  } else if (event.key === 'Enter') {
+    event.preventDefault(); void runInboxAction('open')
+  } else if (event.key.toLowerCase() === 'r') {
+    event.preventDefault(); void runInboxAction('rename')
+  } else if (event.key.toLowerCase() === 'm') {
+    event.preventDefault(); void runInboxAction('move')
+  } else if (event.key.toLowerCase() === 'a') {
+    event.preventDefault(); void runInboxAction('archive')
+  } else if (event.key === 'Delete') {
+    event.preventDefault(); void runInboxAction('delete')
+  }
+})
+inboxPreview.addEventListener('click', (event) => {
+  const action = event.target.closest('[data-inbox-action]')?.dataset.inboxAction
+  if (action) void runInboxAction(action)
+})
+
 document.querySelectorAll('[data-set-theme]').forEach((button) => {
   button.addEventListener('click', () => {
     applyTheme(button.dataset.setTheme)
@@ -444,6 +555,7 @@ function applyTheme(theme) {
   document.querySelectorAll('[data-set-theme]').forEach((button) => {
     button.classList.toggle('active', button.dataset.setTheme === theme)
   })
+  if (reader.querySelector('.inline-diagram') || state.documentKind === 'mermaid') window.setTimeout(() => void refreshMermaidTheme(), 0)
 }
 
 const ACCENT_KEY = 'pliego-accent'
@@ -489,8 +601,39 @@ function stepScale(delta) {
 }
 
 const TRANSLATIONS = {
-  es: { workspace: 'ESPACIO DE TRABAJO', libraries: 'Tus bibliotecas', librariesLead: 'Organiza carpetas de documentos y entra con un clic.', addLibrary: 'Añadir biblioteca', addLibraryHint: 'Selecciona una carpeta de tu equipo', language: 'Idioma', emptyLibraries: 'Aún no hay bibliotecas. Añade tu primera carpeta.', openFile: 'Abrir archivo', openFolder: 'Abrir carpeta', folderSearch: 'Buscar en carpeta · Ctrl+Shift+F', quickOpen: 'Apertura rápida · Ctrl+P', assistant: 'Asistente Codex', index: 'Índice', settings: 'Configuración', searchPlaceholder: 'Títulos, texto, código…', read: 'Lectura', edit: 'Edición', save: 'Guardar', fileLabel: 'Archivo', noFile: 'Ningún archivo abierto', openHint: 'Abre o arrastra un archivo para visualizarlo.', folderLabel: 'Carpeta', folderHint: 'Abre una biblioteca para explorar sus documentos.', recentsLabel: 'Recientes', noRecents: 'Aún no hay archivos recientes.', referencesLabel: 'Referencias', referencesHint: 'Abre un Markdown para ver sus enlaces.', clearReading: 'Lectura clara', readyTitle: 'Listo para abrir tus documentos', readyLead: 'Visor ligero con bibliotecas, edición visual y navegación wiki.' },
-  en: { workspace: 'WORKSPACE', libraries: 'Your libraries', librariesLead: 'Organize document folders and open them with one click.', addLibrary: 'Add library', addLibraryHint: 'Choose a folder from your computer', language: 'Language', emptyLibraries: 'No libraries yet. Add your first folder.', openFile: 'Open file', openFolder: 'Open folder', folderSearch: 'Search folder · Ctrl+Shift+F', quickOpen: 'Quick open · Ctrl+P', assistant: 'Codex assistant', index: 'Table of contents', settings: 'Settings', searchPlaceholder: 'Titles, text, code…', read: 'Read', edit: 'Edit', save: 'Save', fileLabel: 'File', noFile: 'No file open', openHint: 'Open or drop a file to view it.', folderLabel: 'Folder', folderHint: 'Open a library to explore its documents.', recentsLabel: 'Recent', noRecents: 'No recent files yet.', referencesLabel: 'References', referencesHint: 'Open a Markdown file to see its links.', clearReading: 'Clear reading', readyTitle: 'Ready to open your documents', readyLead: 'A lightweight viewer with libraries, visual editing and wiki navigation.' },
+  es: {
+    minimize: 'Minimizar', maximize: 'Maximizar', close: 'Cerrar', workspace: 'ESPACIO DE TRABAJO', libraries: 'Tus bibliotecas', librariesLead: 'Organiza carpetas de documentos y entra con un clic.', brandEyebrow: 'Biblioteca documental', language: 'Idioma', addLibrary: 'Añadir biblioteca', addLibraryHint: 'Selecciona una carpeta de tu equipo', emptyLibraries: 'Aún no hay bibliotecas. Añade tu primera carpeta.',
+    sidebarToggle: 'Mostrar u ocultar panel', sidebarTooltip: 'Panel lateral', openFile: 'Abrir archivo', openFolder: 'Abrir carpeta', newNote: 'Nueva página Markdown', newNoteTooltip: 'Nueva página · Ctrl+N', folderSearch: 'Buscar en carpeta · Ctrl+Shift+F', quickOpen: 'Apertura rápida', quickOpenTooltip: 'Apertura rápida · Ctrl+P', quickCapture: 'Captura rápida', quickCaptureTooltip: 'Captura rápida · Ctrl+Alt+Space', searchLabel: 'Buscar',
+    assistant: 'Asistente Codex', codex: 'Codex AI', favoriteAdd: 'Añadir a favoritos', favoriteRemove: 'Quitar de favoritos', index: 'Índice', settings: 'Configuración', openTabs: 'Archivos abiertos', searchPlaceholder: 'Títulos, texto, código…', read: 'Lectura', edit: 'Edición', save: 'Guardar', fileLabel: 'Archivo', noFile: 'Ningún archivo abierto', openHint: 'Abre o arrastra un archivo para visualizarlo.', folderLabel: 'Carpeta', folderHint: 'Abre una biblioteca para explorar sus documentos.', recentsLabel: 'Recientes', noRecents: 'Aún no hay archivos recientes.', referencesLabel: 'Referencias', referencesHint: 'Abre un Markdown para ver sus enlaces.', clearReading: 'Lectura clara', readyTitle: 'Listo para abrir tus documentos', readyLead: 'Visor ligero con bibliotecas, edición visual y navegación wiki.', dropzone: 'Arrastra aquí tu archivo .md o usa el botón de arriba.', tocSections: '0 secciones', closeIndex: 'Cerrar índice', tocEmpty: 'El índice aparecerá aquí.',
+    codexChat: 'Chat con Codex', closeCodex: 'Cerrar Codex', localAssistant: 'Asistente local', disconnected: 'Desconectado', codexNotice: 'Abre un Markdown para iniciar la conversación.', codexInputPlaceholder: 'Pregunta sobre el Markdown…', modelAndEffort: 'Modelo y esfuerzo', model: 'Modelo', loading: 'Cargando…', effort: 'Esfuerzo', default: 'Predeterminado', context: 'Contexto', documentContext: 'Markdown + referencias', folderContext: 'Toda la carpeta', permissions: 'Permisos', readOnly: 'Solo lectura', writeMarkdown: 'Editar Markdown', allowWeb: 'Permitir búsqueda web en este mensaje', cancel: 'Cancelar', send: 'Enviar',
+    settingsTitle: 'Configuración', theme: 'Tema', light: 'Claro', dark: 'Oscuro', fontSize: 'Tamaño de letra', accentColor: 'Color de acento', gold: 'Dorado', teal: 'Verde azulado', coral: 'Coral', green: 'Verde', purple: 'Púrpura', readerFont: 'Fuente de lectura', history: 'Historial', clearRecents: 'Limpiar recientes', globalCapture: 'Captura global', inboxShortcut: 'Atajo global del Inbox', saveShortcut: 'Guardar atajo', inboxFolder: 'Carpeta Inbox', notConfigured: 'Sin configurar', changeFolder: 'Cambiar carpeta', gettingStarted: 'Primeros pasos', showTutorial: 'Ver tutorial', highlightYellow: 'Resaltar amarillo', highlightGreen: 'Resaltar verde', highlightPink: 'Resaltar rosa', highlightBlue: 'Resaltar azul', removeHighlight: 'Quitar resaltado',
+    commandPalette: 'Paleta de comandos', paletteOpenPlaceholder: 'Abrir archivo…', paletteHint: 'Escribe para filtrar los documentos de la carpeta', typeToSearch: 'Escribe una palabra o frase.', noResults: 'No se encontraron resultados.', currentLibrary: 'Biblioteca actual', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Abrir Inbox', pendingCaptures: 'Capturas pendientes', systemPicker: 'Selector del sistema', changeLibrary: 'Cambiar biblioteca', folderNavigationShortcut: 'Ctrl+Shift+F', navigation: 'Navegación', openCodex: 'Abrir Codex', themeModes: 'Claro / oscuro', newPageLabel: 'NUEVA PÁGINA', createMarkdown: 'Crear Markdown', title: 'Título', titlePlaceholder: 'Idea sobre el proyecto', createdIn: 'Se creará en', createAndEdit: 'Crear y editar', captureClipboard: 'Capturar portapapeles', addFile: 'Añadir archivo', capture: 'Capturar', captures: 'Capturas', backlinks: 'Backlinks',
+    quickCaptureLabel: 'CAPTURA RÁPIDA', quickCaptureTitle: 'Guarda lo que tienes en mente', quickCapturePlaceholder: 'Escribe o pega texto, una URL o una idea…', quickCaptureHint: 'Enter guarda · Shift+Enter crea una línea · Esc cierra', inboxWorkspace: 'ESPACIO DE CAPTURA', inboxTitle: 'Inbox', inboxHomeHint: 'Captura ahora, organiza después.', newCapture: 'Nueva captura', chooseInbox: 'Elige una carpeta para tu Inbox', chooseInboxHint: 'Las capturas serán archivos locales normales, siempre bajo tu control.', chooseFolder: 'Elegir carpeta', importFiles: 'Importar archivos', selectCapture: 'Selecciona una captura', selectCaptureHint: 'Aquí podrás revisar y procesar lo que guardaste.', collections: 'Colecciones', sortBy: 'Ordenar por', mostRecent: 'Más reciente', name: 'Nombre', color: 'Color', quickAccess: 'Acceso rápido', favorites: 'Favoritos', activity: 'Actividad', recent: 'Recientes', editLibrary: 'Editar biblioteca', optionalIcon: 'Icono opcional', saveChanges: 'Guardar cambios', openInFolder: 'Abrir en carpeta',
+    noRecentHome: 'No hay archivos recientes.', noFavoritesHome: 'Aún no has añadido favoritos.', fileCount: 'archivos', unknownError: 'error desconocido', folderNoDocuments: 'La carpeta no tiene documentos compatibles.', noHeadings: 'El documento no tiene encabezados.', visualNoHeadings: 'Este documento no usa encabezados Markdown.', sections: 'secciones', words: 'palabras', lines: 'líneas', referencesMarkdown: 'Las referencias se calculan para Markdown.', noOutgoing: 'Sin enlaces salientes.', noBacklinks: 'Sin backlinks.', unresolvedLink: 'Enlace no resuelto', minimal: 'Mínimo', low: 'Bajo', medium: 'Medio', high: 'Alto', xhigh: 'Muy alto', max: 'Máximo', bold: 'Negrita', italic: 'Cursiva', strike: 'Tachado', inlineCode: 'Código inline', headingOne: 'Título 1', headingTwo: 'Título 2', headingThree: 'Título 3', paragraph: 'Párrafo normal', quote: 'Cita', bulletList: 'Lista', numberedList: 'Lista numerada', removeFormat: 'Quitar formato',
+  },
+  en: {
+    minimize: 'Minimize', maximize: 'Maximize', close: 'Close', workspace: 'WORKSPACE', libraries: 'Your libraries', librariesLead: 'Organize document folders and open them with one click.', brandEyebrow: 'Document library', language: 'Language', addLibrary: 'Add library', addLibraryHint: 'Choose a folder from your computer', emptyLibraries: 'No libraries yet. Add your first folder.',
+    sidebarToggle: 'Show or hide sidebar', sidebarTooltip: 'Sidebar', openFile: 'Open file', openFolder: 'Open folder', newNote: 'New Markdown page', newNoteTooltip: 'New page · Ctrl+N', folderSearch: 'Search folder · Ctrl+Shift+F', quickOpen: 'Quick open', quickOpenTooltip: 'Quick open · Ctrl+P', quickCapture: 'Quick capture', quickCaptureTooltip: 'Quick capture · Ctrl+Alt+Space', searchLabel: 'Search',
+    assistant: 'Codex assistant', codex: 'Codex AI', favoriteAdd: 'Add to favorites', favoriteRemove: 'Remove from favorites', index: 'Table of contents', settings: 'Settings', openTabs: 'Open files', searchPlaceholder: 'Titles, text, code…', read: 'Read', edit: 'Edit', save: 'Save', fileLabel: 'File', noFile: 'No file open', openHint: 'Open or drop a file to view it.', folderLabel: 'Folder', folderHint: 'Open a library to explore its documents.', recentsLabel: 'Recent', noRecents: 'No recent files yet.', referencesLabel: 'References', referencesHint: 'Open a Markdown file to see its links.', clearReading: 'Clear reading', readyTitle: 'Ready to open your documents', readyLead: 'A lightweight viewer with libraries, visual editing and wiki navigation.', dropzone: 'Drop your .md file here or use the button above.', tocSections: '0 sections', closeIndex: 'Close table of contents', tocEmpty: 'The table of contents will appear here.',
+    codexChat: 'Codex chat', closeCodex: 'Close Codex', localAssistant: 'Local assistant', disconnected: 'Disconnected', codexNotice: 'Open a Markdown file to start the conversation.', codexInputPlaceholder: 'Ask about the Markdown…', modelAndEffort: 'Model and effort', model: 'Model', loading: 'Loading…', effort: 'Effort', default: 'Default', context: 'Context', documentContext: 'Markdown + references', folderContext: 'Entire folder', permissions: 'Permissions', readOnly: 'Read only', writeMarkdown: 'Edit Markdown', allowWeb: 'Allow web search in this message', cancel: 'Cancel', send: 'Send',
+    settingsTitle: 'Settings', theme: 'Theme', light: 'Light', dark: 'Dark', fontSize: 'Font size', accentColor: 'Accent color', gold: 'Gold', teal: 'Teal', coral: 'Coral', green: 'Green', purple: 'Purple', readerFont: 'Reading font', history: 'History', clearRecents: 'Clear recent files', globalCapture: 'Global capture', inboxShortcut: 'Inbox global shortcut', saveShortcut: 'Save shortcut', inboxFolder: 'Inbox folder', notConfigured: 'Not configured', changeFolder: 'Change folder', gettingStarted: 'Getting started', showTutorial: 'View tutorial', highlightYellow: 'Highlight yellow', highlightGreen: 'Highlight green', highlightPink: 'Highlight pink', highlightBlue: 'Highlight blue', removeHighlight: 'Remove highlight',
+    commandPalette: 'Command palette', paletteOpenPlaceholder: 'Open file…', paletteHint: 'Type to filter the folder documents', typeToSearch: 'Type a word or phrase.', noResults: 'No results found.', currentLibrary: 'Current library', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Open Inbox', pendingCaptures: 'Pending captures', systemPicker: 'System picker', changeLibrary: 'Change library', folderNavigationShortcut: 'Ctrl+Shift+F', navigation: 'Navigation', openCodex: 'Open Codex', themeModes: 'Light / dark', newPageLabel: 'NEW PAGE', createMarkdown: 'Create Markdown', title: 'Title', titlePlaceholder: 'Idea about the project', createdIn: 'Created in', createAndEdit: 'Create and edit', captureClipboard: 'Capture clipboard', addFile: 'Add file', capture: 'Capture', captures: 'Captures', backlinks: 'Backlinks',
+    quickCaptureLabel: 'QUICK CAPTURE', quickCaptureTitle: 'Save what is on your mind', quickCapturePlaceholder: 'Type or paste text, a URL or an idea…', quickCaptureHint: 'Enter saves · Shift+Enter adds a line · Esc closes', inboxWorkspace: 'CAPTURE SPACE', inboxTitle: 'Inbox', inboxHomeHint: 'Capture now, organize later.', newCapture: 'New capture', chooseInbox: 'Choose a folder for your Inbox', chooseInboxHint: 'Captures are regular local files, always under your control.', chooseFolder: 'Choose folder', importFiles: 'Import files', selectCapture: 'Select a capture', selectCaptureHint: 'Review and process what you saved here.', collections: 'Collections', sortBy: 'Sort by', mostRecent: 'Most recent', name: 'Name', color: 'Color', quickAccess: 'Quick access', favorites: 'Favorites', activity: 'Activity', recent: 'Recent', editLibrary: 'Edit library', optionalIcon: 'Optional icon', saveChanges: 'Save changes', openInFolder: 'Open in folder',
+    noRecentHome: 'No recent files.', noFavoritesHome: 'You have not added favorites yet.', fileCount: 'files', unknownError: 'unknown error', folderNoDocuments: 'The folder has no supported documents.', noHeadings: 'This document has no headings.', visualNoHeadings: 'This document does not use Markdown headings.', sections: 'sections', words: 'words', lines: 'lines', referencesMarkdown: 'References are calculated for Markdown.', noOutgoing: 'No outgoing links.', noBacklinks: 'No backlinks.', unresolvedLink: 'Unresolved link', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Very high', max: 'Maximum', bold: 'Bold', italic: 'Italic', strike: 'Strikethrough', inlineCode: 'Inline code', headingOne: 'Heading 1', headingTwo: 'Heading 2', headingThree: 'Heading 3', paragraph: 'Normal paragraph', quote: 'Quote', bulletList: 'Bullet list', numberedList: 'Numbered list', removeFormat: 'Remove formatting',
+  },
+}
+
+function t(key, fallback = key) {
+  return TRANSLATIONS[state.language]?.[key] || TRANSLATIONS.es[key] || fallback
+}
+
+function uiText(es, en) {
+  return state.language === 'en' ? en : es
+}
+
+function countText(count, singularEs, pluralEs, singularEn, pluralEn) {
+  if (state.language === 'en') return `${count} ${count === 1 ? singularEn : pluralEn}`
+  return `${count} ${count === 1 ? singularEs : pluralEs}`
 }
 
 function applyLanguage(language) {
@@ -502,6 +645,15 @@ function applyLanguage(language) {
     const value = labels[element.dataset.i18n]
     if (value) element.textContent = value
   })
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => { const value = labels[element.dataset.i18nPlaceholder]; if (value) element.placeholder = value })
+  document.querySelectorAll('[data-i18n-aria]').forEach((element) => {
+    const value = labels[element.dataset.i18nAria]
+    if (value) element.setAttribute('aria-label', value)
+  })
+  document.querySelectorAll('[data-i18n-tooltip]').forEach((element) => {
+    const value = labels[element.dataset.i18nTooltip]
+    if (value) element.dataset.tooltip = value
+  })
   const tooltipMap = { openButton: labels.openFile, openFolderButton: labels.openFolder, folderSearchButton: labels.folderSearch, quickOpenButton: labels.quickOpen, codexToggle: labels.assistant, tocToggle: labels.index, settingsButton: labels.settings }
   Object.entries(tooltipMap).forEach(([id, value]) => { const button = $(`#${id}`); button.dataset.tooltip = value; button.setAttribute('aria-label', value.split(' · ')[0]) })
   searchInput.placeholder = labels.searchPlaceholder
@@ -509,8 +661,30 @@ function applyLanguage(language) {
   modeEditButton.textContent = labels.edit
   saveButton.textContent = labels.save
   renderRecents()
+  renderDocumentTabs()
   if ($('#languageLabel')) $('#languageLabel').textContent = state.language === 'en' ? 'English' : 'Español'
+  if ($('#librarySortLabel')) $('#librarySortLabel').textContent = librarySortValue === 'name' ? labels.name : librarySortValue === 'color' ? labels.color : labels.mostRecent
+  if ($('#inboxChangeFolder')) $('#inboxChangeFolder').dataset.tooltip = labels.changeFolder
+  if (formatMenu.children.length) renderFormatMenu()
+  if (state.codexModels.length) renderCodexEfforts(codexEffort.value)
+  onboarding.setLanguage?.(state.language)
   renderLibraries()
+  renderHomeFiles()
+  if (state.folder) renderTree(state.treeNodes)
+  renderInbox()
+  if (state.filePath) {
+    if (state.visualInfo) metaInfo.textContent = visualDetail(state.visualInfo)
+    else updateMeta()
+    renderToc()
+    renderReferences()
+  } else if (reader.classList.contains('empty')) {
+    renderEmptyDocument()
+  }
+  if (!commandPalette.classList.contains('hidden')) {
+    paletteInput.placeholder = state.paletteMode === 'search' ? uiText('Buscar texto en toda la carpeta…', 'Search text across the folder…') : state.paletteMode === 'commands' ? uiText('Ejecutar comando…', 'Run command…') : labels.paletteOpenPlaceholder
+    paletteHint.textContent = paletteHintText()
+    renderPaletteResults(paletteInput.value)
+  }
 }
 
 function libraries() {
@@ -542,7 +716,7 @@ function renderLibraries() {
     libraryGrid.innerHTML = `<p class="library-empty">${TRANSLATIONS[state.language].emptyLibraries}</p>`
     return
   }
-  libraryGrid.innerHTML = list.map((item) => `<div class="library-card" data-library-path="${escapeHtml(item.path)}" style="--library-color:${escapeHtml(item.color || '#d4962a')}"><button class="library-open" type="button"><b class="library-custom-icon">${escapeHtml(item.icon || '▥')}</b><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.path)}</small></span><i>→</i></button><button class="library-edit" type="button" data-edit-library="${escapeHtml(item.path)}" aria-label="Editar biblioteca">${icon('edit')}</button></div>`).join('')
+  libraryGrid.innerHTML = list.map((item) => `<div class="library-card" data-library-path="${escapeHtml(item.path)}" style="--library-color:${escapeHtml(item.color || '#d4962a')}"><button class="library-open" type="button"><b class="library-custom-icon">${escapeHtml(item.icon || '▥')}</b><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.path)}</small></span><i>→</i></button><button class="library-edit" type="button" data-edit-library="${escapeHtml(item.path)}" data-i18n-aria="editLibrary" aria-label="${escapeHtml(t('editLibrary'))}">${icon('edit')}</button></div>`).join('')
 }
 
 libraryGrid.addEventListener('click', (event) => {
@@ -586,7 +760,7 @@ function favorites() {
 }
 
 function toggleFavorite() {
-  if (!state.filePath) { showMessage('Abre un archivo para añadirlo a favoritos.'); return }
+  if (!state.filePath) { showMessage(uiText('Abre un archivo para añadirlo a favoritos.', 'Open a file to add it to favorites.')); return }
   const list = favorites()
   const exists = list.some((item) => item.path === state.filePath)
   const next = exists ? list.filter((item) => item.path !== state.filePath) : [{ path: state.filePath, name: state.fileName, kind: state.documentKind, addedAt: Date.now() }, ...list]
@@ -598,16 +772,213 @@ function toggleFavorite() {
 function updateFavoriteButton() {
   const active = Boolean(state.filePath && favorites().some((item) => item.path === state.filePath))
   favoriteToggle.classList.toggle('favorite-active', active)
-  favoriteToggle.dataset.tooltip = active ? 'Quitar de favoritos' : 'Añadir a favoritos'
+  favoriteToggle.dataset.tooltip = active ? t('favoriteRemove') : t('favoriteAdd')
   favoriteToggle.setAttribute('aria-label', favoriteToggle.dataset.tooltip)
 }
 
 function renderHomeFiles() {
   if (!homeRecents || !homeFavorites) return
-  const render = (items, empty) => items.length ? items.slice(0, 5).map((item) => `<button class="home-file-card" type="button" data-home-file="${escapeHtml(item.path)}"><span>${tabIcon(item.kind || kindFromPath(item.path))}</span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.path)}</small></button>`).join('') : `<p class="home-empty">${empty}</p>`
-  homeRecents.innerHTML = render(getRecents(), 'No hay archivos recientes.')
-  homeFavorites.innerHTML = render(favorites(), 'Aún no has añadido favoritos.')
+  const render = (items, empty) => items.length ? items.slice(0, 5).map((item) => `<button class="home-file-card" type="button" data-home-file="${escapeHtml(item.path)}" data-file-path="${escapeHtml(item.path)}"><span>${tabIcon(item.kind || kindFromPath(item.path))}</span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.path)}</small></button>`).join('') : `<p class="home-empty">${empty}</p>`
+  homeRecents.innerHTML = render(getRecents(), t('noRecentHome'))
+  homeFavorites.innerHTML = render(favorites(), t('noFavoritesHome'))
 }
+
+// ---------- Inbox y captura rápida ----------
+
+function inboxText(key, es, en) { return state.language === 'en' ? en : es }
+
+function normalizeInboxConfig(value) {
+  if (typeof value === 'string') return { folder: value, shortcut: 'Ctrl+Alt+Space' }
+  return { folder: value?.folder || value?.path || '', shortcut: value?.shortcut || 'Ctrl+Alt+Space' }
+}
+
+function normalizeInboxItems(value) {
+  const list = Array.isArray(value) ? value : value?.items
+  return (Array.isArray(list) ? list : []).map((item) => typeof item === 'string'
+    ? { path: item, name: item.split(/[\\/]/).pop(), kind: kindFromPath(item) }
+    : { ...item, path: item.path || '', name: item.name || (item.path || '').split(/[\\/]/).pop() || uiText('Captura', 'Capture'), kind: item.kind || kindFromPath(item.path || '') })
+}
+
+async function refreshInbox() {
+  try {
+    inboxConfig = normalizeInboxConfig(await invoke('inbox_get_config'))
+    inboxItems = inboxConfig.folder ? normalizeInboxItems(await invoke('inbox_list')) : []
+  } catch (_) {
+    inboxConfig = { folder: '', shortcut: 'Ctrl+Alt+Space' }
+    inboxItems = []
+  }
+  renderInbox()
+}
+
+function updateInboxBadges() {
+  const count = inboxItems.length
+  const badge = $('#inboxToolbarBadge')
+  badge.textContent = count > 99 ? '99+' : String(count)
+  badge.classList.toggle('hidden', count === 0)
+  $('#homeInboxCount').textContent = String(count)
+  $('#homeInboxCount').classList.toggle('empty', count === 0)
+}
+
+function renderInbox() {
+  const configured = Boolean(inboxConfig.folder)
+  $('#inboxSetup').classList.toggle('hidden', configured)
+  $('#inboxContent').classList.toggle('hidden', !configured)
+  $('#inboxFolderLabel').textContent = configured ? inboxConfig.folder : inboxText('', 'Configura una carpeta para empezar.', 'Choose a folder to get started.')
+  $('#inboxSettingsFolder').textContent = configured ? inboxConfig.folder : inboxText('', 'Sin configurar', 'Not configured')
+  $('#inboxShortcutInput').value = inboxConfig.shortcut || 'Ctrl+Alt+Space'
+  $('#inboxCount').textContent = countText(inboxItems.length, 'pendiente', 'pendientes', 'pending', 'pending')
+  updateInboxBadges()
+  if (!configured) return
+  if (!inboxItems.length) {
+    inboxList.innerHTML = `<div class="inbox-list-empty"><strong>${inboxText('', 'Todo procesado', 'All caught up')}</strong><small>${inboxText('', 'Tu Inbox está vacío.', 'Your Inbox is empty.')}</small></div>`
+    selectedInboxPath = ''
+    renderInboxPreview()
+    return
+  }
+  if (!inboxItems.some((item) => item.path === selectedInboxPath)) selectedInboxPath = inboxItems[0].path
+  inboxList.innerHTML = inboxItems.map((item) => `<button class="inbox-list-item${item.path === selectedInboxPath ? ' active' : ''}" type="button" role="option" tabindex="${item.path === selectedInboxPath ? '0' : '-1'}" aria-selected="${item.path === selectedInboxPath}" data-inbox-path="${escapeHtml(String(item.path))}" data-file-path="${escapeHtml(String(item.path))}"><b>${tabIcon(item.kind)}</b><span><strong>${escapeHtml(String(item.name))}</strong><small>${escapeHtml(String(item.modifiedMs || item.path))}</small></span></button>`).join('')
+  renderInboxPreview()
+}
+
+function renderInboxPreview() {
+  const item = inboxItems.find((entry) => entry.path === selectedInboxPath)
+  if (!item) {
+    inboxPreview.innerHTML = `<div class="inbox-empty"><span>${icon('inbox')}</span><h3>${inboxText('', 'Tu Inbox está despejado', 'Your Inbox is clear')}</h3><p>${inboxText('', 'Usa Captura rápida para guardar una idea.', 'Use Quick Capture to save an idea.')}</p></div>`
+    return
+  }
+  const preview = item.previewLoading
+    ? inboxText('', 'Cargando vista previa…', 'Loading preview…')
+    : item.preview ?? inboxText('', 'Vista previa no disponible para este tipo de archivo.', 'Preview is not available for this file type.')
+  const truncated = item.previewTruncated ? `<small class="preview-truncated">${inboxText('', 'Vista previa recortada a 256 KB', 'Preview limited to 256 KB')}</small>` : ''
+  inboxPreview.innerHTML = `<article class="inbox-preview-card"><div class="inbox-preview-meta"><span>${escapeHtml(String(item.kind || 'file')).toUpperCase()}</span><small>${escapeHtml(String(item.path))}</small></div><h3>${escapeHtml(String(item.name))}</h3><pre>${escapeHtml(String(preview))}</pre>${truncated}<div class="inbox-item-actions"><button class="primary-button" data-inbox-action="open" type="button">${inboxText('', 'Abrir', 'Open')}</button><button class="ghost-button" data-inbox-action="rename" type="button">${inboxText('', 'Renombrar', 'Rename')}</button><button class="ghost-button" data-inbox-action="move" type="button">${inboxText('', 'Mover', 'Move')}</button><button class="ghost-button" data-inbox-action="archive" type="button">${inboxText('', 'Archivar', 'Archive')}</button><button class="ghost-button danger" data-inbox-action="delete" type="button">${inboxText('', 'Eliminar', 'Delete')}</button></div><p class="inbox-keyboard-hint">↑↓ ${inboxText('', 'navegar', 'navigate')} · Enter ${inboxText('', 'abrir', 'open')} · R ${inboxText('', 'renombrar', 'rename')} · M ${inboxText('', 'mover', 'move')} · A ${inboxText('', 'archivar', 'archive')} · Del ${inboxText('', 'eliminar', 'delete')}</p></article>`
+  if (item.preview === undefined && !item.previewLoading) void loadInboxPreview(item)
+}
+
+async function loadInboxPreview(item) {
+  const request = ++inboxPreviewRequest
+  item.previewLoading = true
+  renderInboxPreview()
+  try {
+    const result = await invoke('inbox_read_preview', { name: item.name })
+    if (request !== inboxPreviewRequest || selectedInboxPath !== item.path) return
+    item.preview = result?.contents ?? null
+    item.previewTruncated = Boolean(result?.truncated)
+  } catch (_) {
+    item.preview = null
+  } finally {
+    item.previewLoading = false
+    if (request === inboxPreviewRequest && selectedInboxPath === item.path) renderInboxPreview()
+  }
+}
+
+function selectInboxItem(path, focus = false) {
+  selectedInboxPath = path
+  renderInbox()
+  if (focus) window.setTimeout(() => inboxList.querySelector(`[data-inbox-path="${CSS.escape(path)}"]`)?.focus(), 0)
+}
+
+async function openInbox() {
+  libraryHome.classList.add('hidden')
+  inboxView.classList.remove('hidden')
+  await refreshInbox()
+}
+
+function openQuickCapture(seed = '') {
+  quickCapturePreviousFocus = document.activeElement
+  quickCapture.classList.remove('hidden')
+  quickCaptureInput.value = typeof seed === 'string' ? seed : ''
+  window.setTimeout(() => quickCaptureInput.focus(), 0)
+}
+
+function closeQuickCapture() {
+  quickCapture.classList.add('hidden')
+  if (quickCapturePreviousFocus?.focus) quickCapturePreviousFocus.focus()
+  quickCapturePreviousFocus = null
+}
+
+async function saveQuickCapture() {
+  const text = quickCaptureInput.value.trim()
+  if (!text) return
+  try {
+    if (/^https?:\/\/\S+$/i.test(text)) await invoke('inbox_capture_url', { url: text, title: null })
+    else await invoke('inbox_capture_text', { contents: text, title: null })
+    closeQuickCapture()
+    quickCaptureInput.value = ''
+    await refreshInbox()
+    showMessage(inboxText('', 'Captura guardada en Inbox.', 'Capture saved to Inbox.'))
+  } catch (error) {
+    showMessage(formatError(error))
+  }
+}
+
+async function captureInboxClipboard() {
+  try {
+    await invoke('inbox_capture_clipboard', { title: null })
+    closeQuickCapture()
+    await refreshInbox()
+    showMessage(inboxText('', 'Portapapeles guardado en Inbox.', 'Clipboard saved to Inbox.'))
+  } catch (error) { showMessage(formatError(error)) }
+}
+
+async function saveInboxShortcut() {
+  const shortcut = $('#inboxShortcutInput').value.trim()
+  if (!shortcut) return
+  try {
+    inboxConfig = normalizeInboxConfig(await invoke('inbox_set_shortcut', { shortcut }))
+    renderInbox()
+    showMessage(inboxText('', `Atajo actualizado: ${inboxConfig.shortcut}`, `Shortcut updated: ${inboxConfig.shortcut}`))
+  } catch (error) { showMessage(formatError(error)) }
+}
+
+async function chooseInboxFolder() {
+  const folder = await openDialog({ directory: true, multiple: false, title: inboxText('', 'Elegir carpeta Inbox', 'Choose Inbox folder') })
+  if (!folder) return
+  try {
+    await invoke('inbox_set_folder', { folder })
+    await refreshInbox()
+  } catch (error) { showMessage(formatError(error)) }
+}
+
+async function importInboxFiles(closeCapture = false) {
+  const paths = await openDialog({ multiple: true, directory: false, title: inboxText('', 'Importar a Inbox', 'Import to Inbox') })
+  if (!paths?.length) return
+  try {
+    await invoke('inbox_import_files', { paths })
+    if (closeCapture) closeQuickCapture()
+    await refreshInbox()
+    showMessage(inboxText('', 'Archivos añadidos al Inbox.', 'Files added to Inbox.'))
+  } catch (error) { showMessage(formatError(error)) }
+}
+
+async function runInboxAction(action) {
+  const item = inboxItems.find((entry) => entry.path === selectedInboxPath)
+  if (!item) return
+  try {
+    if (action === 'open') {
+      inboxView.classList.add('hidden')
+      await loadFileFromPath(item.path)
+      return
+    } else if (action === 'rename') {
+      const name = window.prompt(inboxText('', 'Nuevo nombre', 'New name'), item.name)
+      if (!name?.trim() || name === item.name) return
+      await invoke('inbox_rename', { name: item.name, newName: name.trim() })
+    } else if (action === 'move') {
+      const destination = await openDialog({ directory: true, multiple: false, title: inboxText('', 'Mover captura a…', 'Move capture to…') })
+      if (!destination) return
+      await invoke('inbox_move', { name: item.name, destinationFolder: destination })
+    } else if (action === 'archive') {
+      await invoke('inbox_archive', { name: item.name })
+    } else if (action === 'delete') {
+      if (!window.confirm(inboxText('', `¿Eliminar “${item.name}”?`, `Delete “${item.name}”?`))) return
+      await invoke('inbox_delete', { name: item.name })
+    }
+    selectedInboxPath = ''
+    await refreshInbox()
+  } catch (error) { showMessage(formatError(error)) }
+}
+
+void listen('pliego://open-inbox-capture', ({ payload }) => openQuickCapture(payload?.text || payload || '')).catch(() => {})
+void refreshInbox()
 
 ;[homeRecents, homeFavorites].forEach((container) => container.addEventListener('click', (event) => { const file = event.target.closest('[data-home-file]'); if (!file) return; libraryHome.classList.add('hidden'); void loadFileFromPath(file.dataset.homeFile) }))
 
@@ -654,7 +1025,7 @@ $('#codexForm').addEventListener('submit', async (event) => {
   if (!message || state.codexBusy) return
   if (!state.codexThreadId && !(await restoreCodexContext())) return
   appendCodexMessage('user', message)
-  appendCodexLoading('Preparando respuesta')
+  appendCodexLoading(uiText('Preparando respuesta', 'Preparing response'))
   state.codexItemPhases = {}
   state.codexFinalMarkdown = ''
   codexInput.value = ''
@@ -694,19 +1065,19 @@ void listen('codex-event', ({ payload }) => handleCodexEvent(payload)).catch(() 
 
 async function openCodexPanel() {
   codexPanel.classList.remove('hidden')
-  codexStatusLabel.textContent = 'Conectando…'
+  codexStatusLabel.textContent = uiText('Conectando…', 'Connecting…')
   try {
     const status = await invoke('codex_status')
     const models = await invoke('codex_models')
-    codexStatusLabel.textContent = status.authenticated ? 'Conectado' : 'Sin sesión'
+    codexStatusLabel.textContent = status.authenticated ? uiText('Conectado', 'Connected') : uiText('Sin sesión', 'Signed out')
     codexStatusLabel.classList.toggle('error', !status.authenticated)
     setCodexNotice(status.message, !status.authenticated)
     renderCodexModels(models.data || [])
     if (status.authenticated) await restoreCodexContext()
   } catch (error) {
-    codexStatusLabel.textContent = 'No disponible'
+    codexStatusLabel.textContent = uiText('No disponible', 'Unavailable')
     codexStatusLabel.classList.add('error')
-    setCodexNotice(`${formatError(error)}. Ejecuta codex login si falta la sesión.`, true)
+    setCodexNotice(`${formatError(error)}. ${uiText('Ejecuta codex login si falta la sesión.', 'Run codex login if the session is missing.')}`, true)
   }
 }
 
@@ -736,13 +1107,13 @@ function renderCodexEfforts(preferredValue = '') {
 }
 
 function updateCodexOptionsSummary() {
-  const model = codexModel.selectedOptions[0]?.textContent || 'Modelo'
-  const effort = codexEffort.selectedOptions[0]?.textContent || 'Esfuerzo'
+  const model = codexModel.selectedOptions[0]?.textContent || t('model')
+  const effort = codexEffort.selectedOptions[0]?.textContent || t('effort')
   codexOptionsSummary.textContent = `${model} · ${effort}`
 }
 
 function effortLabel(value) {
-  return ({ minimal: 'Mínimo', low: 'Bajo', medium: 'Medio', high: 'Alto', xhigh: 'Muy alto', max: 'Máximo' })[value] || value
+  return t(value, value)
 }
 
 function codexScope() {
@@ -778,7 +1149,7 @@ async function restoreCodexContext() {
   if (!scope) {
     state.codexThreadId = ''
     codexMessages.innerHTML = ''
-    setCodexNotice(state.codexContext === 'folder' ? 'Abre una carpeta primero.' : 'Abre un Markdown primero.', true)
+    setCodexNotice(state.codexContext === 'folder' ? uiText('Abre una carpeta primero.', 'Open a folder first.') : uiText('Abre un Markdown primero.', 'Open a Markdown file first.'), true)
     return false
   }
   const saved = codexAssociations()[codexKey(scope)] || {}
@@ -786,7 +1157,7 @@ async function restoreCodexContext() {
     codexModel.value = saved.model
   }
   renderCodexEfforts(saved.effort || '')
-  setCodexNotice('Cargando conversación…')
+  setCodexNotice(uiText('Cargando conversación…', 'Loading conversation…'))
   try {
     const result = await invoke('codex_open_context', {
       request: {
@@ -801,8 +1172,10 @@ async function restoreCodexContext() {
     state.codexThreadId = result.threadId
     persistCodexAssociation()
     renderCodexHistory(result.thread)
-    const related = scope.contextType === 'document' ? ` Puede leer ${result.relatedCount || 0} Markdown relacionados directamente.` : ''
-    setCodexNotice((result.resumed ? 'Conversación reanudada.' : saved.threadId ? 'El thread anterior no estaba disponible; se creó uno nuevo.' : 'Conversación lista.') + related)
+    const related = scope.contextType === 'document'
+      ? uiText(` Puede leer ${result.relatedCount || 0} Markdown relacionados directamente.`, ` It can read ${result.relatedCount || 0} related Markdown files directly.`)
+      : ''
+    setCodexNotice((result.resumed ? uiText('Conversación reanudada.', 'Conversation resumed.') : saved.threadId ? uiText('El thread anterior no estaba disponible; se creó uno nuevo.', 'The previous thread was unavailable; a new one was created.') : uiText('Conversación lista.', 'Conversation ready.')) + related)
     return true
   } catch (error) {
     state.codexThreadId = ''
@@ -848,7 +1221,7 @@ function setCodexBusy(busy) {
   state.codexBusy = busy
   codexSend.disabled = busy
   codexCancel.classList.toggle('hidden', !busy)
-  codexStatusLabel.textContent = busy ? 'Pensando…' : 'Conectado'
+  codexStatusLabel.textContent = busy ? uiText('Pensando…', 'Thinking…') : uiText('Conectado', 'Connected')
 }
 
 function setCodexNotice(message, isError = false) {
@@ -884,18 +1257,18 @@ async function handleCodexEvent(event) {
     setCodexBusy(false)
   } else if (event.type === 'toolActivity' && event.data?.item?.type === 'agentMessage') {
     state.codexItemPhases[event.data.item.id] = event.data.item.phase || 'unknown'
-    if (event.data.item.phase === 'final_answer') appendCodexLoading('Escribiendo respuesta')
+    if (event.data.item.phase === 'final_answer') appendCodexLoading(uiText('Escribiendo respuesta', 'Writing response'))
   } else if (event.type === 'toolActivity' && event.tool) {
-    setCodexNotice(`Herramienta: ${event.tool}${event.success === false ? ' (rechazada)' : ''}`, event.success === false)
+    setCodexNotice(`${uiText('Herramienta', 'Tool')}: ${event.tool}${event.success === false ? uiText(' (rechazada)', ' (rejected)') : ''}`, event.success === false)
   } else if (event.type === 'toolActivity' && event.data?.item?.type === 'dynamicToolCall') {
-    appendCodexLoading(event.data.item.tool === 'markdown_read' ? 'Leyendo Markdown' : 'Trabajando con Markdown')
+    appendCodexLoading(event.data.item.tool === 'markdown_read' ? uiText('Leyendo Markdown', 'Reading Markdown') : uiText('Trabajando con Markdown', 'Working with Markdown'))
   } else if (event.type === 'fileModified') {
-    setCodexNotice('Markdown actualizado; refrescando visor.')
+    setCodexNotice(uiText('Markdown actualizado; refrescando visor.', 'Markdown updated; refreshing viewer.'))
     if (state.filePath) void refreshCodexEditedDocument()
   } else if (event.type === 'rateLimits') {
-    setCodexNotice('Límites de uso actualizados por Codex.')
+    setCodexNotice(uiText('Límites de uso actualizados por Codex.', 'Codex usage limits updated.'))
   } else if (event.type === 'error' || event.type === 'connection') {
-    setCodexNotice(event.message || 'Codex se desconectó.', true)
+    setCodexNotice(event.message || uiText('Codex se desconectó.', 'Codex disconnected.'), true)
     setCodexBusy(false)
     if (event.type === 'connection' && event.connected === false && !codexPanel.classList.contains('hidden')) {
       window.setTimeout(() => void openCodexPanel(), 800)
@@ -940,6 +1313,84 @@ async function refreshCodexEditedDocument() {
 
 // ---------- Apertura de archivos ----------
 
+function normalizedNewNote(value) {
+  const raw = value.trim()
+  if (!raw) return { error: uiText('Escribe un título para la página.', 'Enter a title for the page.') }
+  if (Array.from(raw).length > 120) return { error: uiText('El título no puede superar 120 caracteres.', 'The title cannot exceed 120 characters.') }
+  if (/[\/\\<>:"|?*\u0000-\u001f]/.test(raw)) return { error: uiText('El título contiene caracteres no permitidos.', 'The title contains invalid characters.') }
+  const title = raw.replace(/\.(markdown|mdown|mkd|md)$/i, '').trim().replace(/\.+$/, '').trim()
+  if (!title || title === '.' || title === '..') return { error: uiText('El título no produce un nombre válido.', 'The title does not produce a valid file name.') }
+  const reserved = title.split('.')[0].toUpperCase()
+  if (/^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$/.test(reserved)) return { error: uiText('Ese nombre está reservado por el sistema.', 'That name is reserved by the operating system.') }
+  return { title, fileName: `${title}.md` }
+}
+
+function updateNewNotePreview() {
+  const result = normalizedNewNote(newNoteInput.value)
+  const folder = state.folder ? state.folder.replace(/\/$/, '') : ''
+  newNotePath.textContent = result.fileName && folder ? `${folder}/${result.fileName}` : folder || uiText('Abre primero una carpeta', 'Open a folder first')
+  newNoteError.textContent = result.error || ''
+  newNoteError.classList.toggle('hidden', !result.error)
+  $('#newNoteCreate').disabled = Boolean(result.error || !folder)
+  return result
+}
+
+function openNewNoteDialog() {
+  if (!newNoteModal.classList.contains('hidden')) {
+    newNoteInput.focus()
+    return
+  }
+  if (!state.folder) {
+    showMessage(uiText('Abre una carpeta antes de crear una página Markdown.', 'Open a folder before creating a Markdown page.'))
+    return
+  }
+  if (state.dirty) {
+    showMessage(uiText('Guarda los cambios actuales antes de crear otra página.', 'Save the current changes before creating another page.'))
+    return
+  }
+  newNotePreviousFocus = document.activeElement
+  newNoteInput.value = ''
+  newNoteError.classList.add('hidden')
+  newNoteModal.classList.remove('hidden')
+  updateNewNotePreview()
+  window.setTimeout(() => newNoteInput.focus(), 0)
+}
+
+function closeNewNoteDialog() {
+  newNoteModal.classList.add('hidden')
+  if (newNotePreviousFocus?.focus) newNotePreviousFocus.focus()
+  newNotePreviousFocus = null
+}
+
+async function createNewNote() {
+  const result = updateNewNotePreview()
+  if (result.error || !state.folder) return
+  const createButton = $('#newNoteCreate')
+  createButton.disabled = true
+  const folder = state.folder
+  try {
+    const created = await invoke('create_markdown_file', { folder, title: result.title })
+    await loadFolder(folder)
+    closeNewNoteDialog()
+    await loadFileFromPath(created.path)
+    setMode('edit')
+    showMessage(`${uiText('Página creada', 'Page created')}: ${created.fileName}`)
+  } catch (error) {
+    newNoteError.textContent = formatError(error)
+    newNoteError.classList.remove('hidden')
+    newNoteInput.focus()
+  } finally {
+    createButton.disabled = false
+  }
+}
+
+$('#newNoteButton').addEventListener('click', openNewNoteDialog)
+$('#newNoteClose').addEventListener('click', closeNewNoteDialog)
+$('#newNoteCancel').addEventListener('click', closeNewNoteDialog)
+newNoteInput.addEventListener('input', updateNewNotePreview)
+$('#newNoteForm').addEventListener('submit', (event) => { event.preventDefault(); void createNewNote() })
+newNoteModal.addEventListener('click', (event) => { if (event.target === newNoteModal) closeNewNoteDialog() })
+
 $('#openButton').addEventListener('click', () => void openMarkdown())
 $('#openFolderButton').addEventListener('click', () => void openFolder())
 $('#folderSearchButton').addEventListener('click', () => openPalette('search'))
@@ -957,7 +1408,7 @@ async function openMarkdown() {
   try {
     const selected = await openDialog({
       multiple: false,
-      filters: [{ name: 'Documentos', extensions: ['md', 'markdown', 'mdown', 'mkd', 'txt', 'csv', 'tsv', 'pdf', 'docx', 'epub', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'mmd', 'mermaid'] }],
+      filters: [{ name: uiText('Documentos', 'Documents'), extensions: ['md', 'markdown', 'mdown', 'mkd', 'txt', 'csv', 'tsv', 'pdf', 'docx', 'epub', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'mmd', 'mermaid'] }],
     })
     if (typeof selected === 'string' && selected.length > 0) {
       await loadFileFromPath(selected)
@@ -979,7 +1430,7 @@ async function openFolder() {
       await loadFolder(selected)
     }
   } catch (error) {
-    showMessage('No pude abrir la carpeta: ' + formatError(error))
+    showMessage(`${uiText('No pude abrir la carpeta: ', 'Could not open the folder: ')}${formatError(error)}`)
   }
 }
 
@@ -991,12 +1442,13 @@ async function loadFolder(dir) {
     ])
     state.folder = dir
     state.documentIndex = Array.isArray(index) ? index : []
+    state.treeNodes = Array.isArray(nodes) ? nodes : []
     addLibrary(dir)
     localStorage.setItem(FOLDER_KEY, dir)
     renderTree(nodes)
     if (!codexPanel.classList.contains('hidden') && state.codexContext === 'folder') void restoreCodexContext()
   } catch (error) {
-    showMessage('No pude leer la carpeta: ' + formatError(error))
+    showMessage(`${uiText('No pude leer la carpeta: ', 'Could not read the folder: ')}${formatError(error)}`)
   }
 }
 
@@ -1009,9 +1461,9 @@ function countFiles(nodes) {
 }
 
 function renderTree(nodes) {
-  treeCount.textContent = `${countFiles(nodes)} archivos`
+  treeCount.textContent = countText(countFiles(nodes), 'archivo', 'archivos', 'file', 'files')
   if (!nodes.length) {
-    treeBox.innerHTML = '<p class="muted">La carpeta no tiene documentos compatibles.</p>'
+    treeBox.innerHTML = `<p class="muted">${t('folderNoDocuments')}</p>`
     return
   }
   treeBox.innerHTML = nodes.map((node) => renderTreeNode(node)).join('')
@@ -1026,7 +1478,7 @@ function renderTreeNode(node) {
       </details>
     `
   }
-  return `<button class="tree-file" type="button" data-path="${escapeHtml(node.path)}" title="${escapeHtml(node.path)}">${escapeHtml(node.name)}</button>`
+  return `<button class="tree-file" type="button" data-path="${escapeHtml(node.path)}" data-file-path="${escapeHtml(node.path)}" title="${escapeHtml(node.path)}">${escapeHtml(node.name)}</button>`
 }
 
 treeBox.addEventListener('click', (event) => {
@@ -1034,6 +1486,49 @@ treeBox.addEventListener('click', (event) => {
   if (target) {
     void loadFileFromPath(target.dataset.path)
   }
+})
+
+function hideFileContextMenu() {
+  fileContextMenu.classList.add('hidden')
+  fileContextMenuPath = ''
+}
+
+function showFileContextMenu(event, path) {
+  fileContextMenuPath = path
+  fileContextMenu.classList.remove('hidden')
+  const margin = 8
+  const left = Math.min(event.clientX, window.innerWidth - fileContextMenu.offsetWidth - margin)
+  const top = Math.min(event.clientY, window.innerHeight - fileContextMenu.offsetHeight - margin)
+  fileContextMenu.style.left = `${Math.max(margin, left)}px`
+  fileContextMenu.style.top = `${Math.max(margin, top)}px`
+  openFileInFolderButton.focus()
+}
+
+document.addEventListener('contextmenu', (event) => {
+  const target = event.target instanceof Element ? event.target.closest('[data-file-path]') : null
+  if (!target) return
+  event.preventDefault()
+  showFileContextMenu(event, target.dataset.filePath)
+})
+
+openFileInFolderButton.addEventListener('click', async () => {
+  const path = fileContextMenuPath
+  hideFileContextMenu()
+  if (!path) return
+  try {
+    await invoke('open_file_in_folder', { path })
+  } catch (error) {
+    showMessage(`${uiText('No se pudo abrir la carpeta: ', 'Could not open the folder: ')}${formatError(error)}`)
+  }
+})
+
+document.addEventListener('click', (event) => {
+  if (!fileContextMenu.contains(event.target)) hideFileContextMenu()
+})
+window.addEventListener('blur', hideFileContextMenu)
+window.addEventListener('resize', hideFileContextMenu)
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') hideFileContextMenu()
 })
 
 async function loadInitialFile() {
@@ -1065,13 +1560,13 @@ async function loadBrowserFile(file) {
     applyDocument(file.name, '', markdown, html)
     hideMessage()
   } catch (error) {
-    showMessage(`No pude leer el archivo: ${formatError(error)}`)
+    showMessage(`${uiText('No pude leer el archivo: ', 'Could not read the file: ')}${formatError(error)}`)
   }
 }
 
 async function loadFileFromPath(path) {
   if (state.mode === 'edit' && state.dirty) {
-    showMessage('Tienes cambios sin guardar. Guarda o vuelve a Lectura antes de abrir otro archivo.')
+    showMessage(uiText('Tienes cambios sin guardar. Guarda o vuelve a Lectura antes de abrir otro archivo.', 'You have unsaved changes. Save them or switch back to Read before opening another file.'))
     return
   }
   const generation = beginDocumentLoad()
@@ -1087,17 +1582,17 @@ async function loadFileFromPath(path) {
       folder: state.folder || null,
     })
     if (!payload || typeof payload !== 'object') {
-      throw new Error('respuesta invalida')
+      throw new Error(uiText('Respuesta inválida', 'Invalid response'))
     }
     if (!isCurrentLoad(generation)) return
-    applyDocument(payload.fileName, path, payload.contents, payload.html)
     state.documentKind = kind
+    applyDocument(payload.fileName, path, payload.contents, payload.html)
     renderReferences()
     addRecent(path, payload.fileName)
     hideMessage()
   } catch (error) {
     if (!isCurrentLoad(generation) || error?.name === 'AbortError') return
-    showMessage(`No pude abrir el archivo seleccionado: ${formatError(error)}`)
+    showMessage(`${uiText('No pude abrir el archivo seleccionado: ', 'Could not open the selected file: ')}${formatError(error)}`)
   }
 }
 
@@ -1105,6 +1600,7 @@ function beginDocumentLoad() {
   state.loadGeneration += 1
   reader._visualCleanup?.()
   reader._visualCleanup = null
+  cleanupMarkdownImages()
   return state.loadGeneration
 }
 
@@ -1142,10 +1638,11 @@ async function loadVisualFile(path, kind, entry, generation) {
     info = await renderVisualDocument(reader, payload, path)
   }
   if (!isCurrentLoad(generation)) return
+  state.visualInfo = info
   fileNameLabel.textContent = state.fileName
-  metaInfo.textContent = info?.detail || kind
-  toc.innerHTML = '<p class="muted">Este documento no usa encabezados Markdown.</p>'
-  tocCount.textContent = 'Vista visual'
+  metaInfo.textContent = visualDetail(info) || kind
+  toc.innerHTML = `<p class="muted">${t('visualNoHeadings')}</p>`
+  tocCount.textContent = uiText('Vista visual', 'Visual view')
   searchInput.value = ''
   searchStats.textContent = '0'
   markActiveTreeFile()
@@ -1174,6 +1671,7 @@ function splitFrontmatter(markdown) {
 function applyDocument(fileName, filePath, markdown, html) {
   reader._visualCleanup?.()
   reader._visualCleanup = null
+  cleanupMarkdownImages()
   state.fileName = fileName
   state.filePath = filePath
   state.markdown = markdown
@@ -1181,6 +1679,7 @@ function applyDocument(fileName, filePath, markdown, html) {
   state.html = html
   state.dirty = false
   state.documentKind = kindFromPath(filePath || fileName)
+  state.visualInfo = null
   modeEditButton.disabled = false
   reader.classList.remove('visual-document')
 
@@ -1209,7 +1708,7 @@ function addDocumentTab(path, name, kind) {
 function renderDocumentTabs() {
   if (!documentTabs) return
   documentTabs.classList.toggle('hidden', state.openTabs.length === 0)
-  documentTabs.innerHTML = state.openTabs.map((tab) => `<button class="document-tab${tab.path === state.filePath ? ' active' : ''}" type="button" data-tab-path="${escapeHtml(tab.path)}" title="${escapeHtml(tab.path)}"><span class="tab-kind">${tabIcon(tab.kind)}</span><span>${escapeHtml(tab.name)}</span>${tab.path === state.filePath && state.dirty ? '<i class="dirty-dot"></i>' : `<i class="tab-close" data-close-tab="${escapeHtml(tab.path)}" aria-label="Cerrar">×</i>`}</button>`).join('')
+  documentTabs.innerHTML = state.openTabs.map((tab) => `<button class="document-tab${tab.path === state.filePath ? ' active' : ''}" type="button" data-tab-path="${escapeHtml(tab.path)}" data-file-path="${escapeHtml(tab.path)}" title="${escapeHtml(tab.path)}"><span class="tab-kind">${tabIcon(tab.kind)}</span><span>${escapeHtml(tab.name)}</span>${tab.path === state.filePath && state.dirty ? '<i class="dirty-dot"></i>' : `<i class="tab-close" data-close-tab="${escapeHtml(tab.path)}" aria-label="${escapeHtml(t('close'))}">×</i>`}</button>`).join('')
   documentTabs.querySelector('.document-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }
 
@@ -1230,7 +1729,7 @@ documentTabs.addEventListener('click', (event) => {
 
 async function closeDocumentTab(path) {
   if (path === state.filePath && state.dirty) {
-    showMessage('Guarda los cambios antes de cerrar esta pestaña.')
+    showMessage(uiText('Guarda los cambios antes de cerrar esta pestaña.', 'Save your changes before closing this tab.'))
     return
   }
   const index = state.openTabs.findIndex((tab) => tab.path === path)
@@ -1248,13 +1747,25 @@ function clearCurrentDocument() {
   state.fileName = ''
   state.filePath = ''
   state.markdown = ''
+  state.visualInfo = null
   state.dirty = false
   updateFavoriteButton()
   reader.className = 'reader empty'
-  reader.innerHTML = '<div class="empty-state"><p class="eyebrow">Lectura clara</p><h2>Listo para abrir documentos</h2><p>Abre una biblioteca o arrastra un archivo.</p></div>'
-  fileNameLabel.textContent = 'Ningún archivo abierto'
-  metaInfo.textContent = 'Selecciona un documento para visualizarlo.'
+  cleanupMarkdownImages()
+  renderEmptyDocument()
+  fileNameLabel.textContent = t('noFile')
+  metaInfo.textContent = uiText('Selecciona un documento para visualizarlo.', 'Select a document to view it.')
   renderReferences()
+}
+
+function renderEmptyDocument() {
+  reader.innerHTML = `<div class="empty-state"><p class="eyebrow">${t('clearReading')}</p><h2>${uiText('Listo para abrir documentos', 'Ready to open documents')}</h2><p>${uiText('Abre una biblioteca o arrastra un archivo.', 'Open a library or drop a file.')}</p></div>`
+}
+
+function visualDetail(info) {
+  if (!info) return ''
+  if (info.detailEs && info.detailEn) return state.language === 'en' ? info.detailEn : info.detailEs
+  return info.detail || ''
 }
 
 function markActiveTreeFile() {
@@ -1293,13 +1804,13 @@ function addRecent(path, name) {
 function renderRecents() {
   const list = getRecents()
   if (!list.length) {
-    recentsBox.innerHTML = `<p class="muted">${state.language === 'en' ? 'No recent files yet.' : 'Aún no hay archivos recientes.'}</p>`
+    recentsBox.innerHTML = `<p class="muted">${t('noRecents')}</p>`
     return
   }
   recentsBox.innerHTML = list
     .map(
       (item) =>
-        `<button class="recent-link" type="button" data-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}">${escapeHtml(item.name)}</button>`,
+        `<button class="recent-link" type="button" data-path="${escapeHtml(item.path)}" data-file-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}">${escapeHtml(item.name)}</button>`,
     )
     .join('')
 }
@@ -1323,19 +1834,19 @@ reader.addEventListener('click', (event) => {
   event.preventDefault()
 
   if (/^[a-z]+:\/\//i.test(href) || href.startsWith('mailto:')) {
-    showMessage(`Enlace externo (no se abre en el visor): ${href}`)
+    showMessage(`${uiText('Enlace externo (no se abre en el visor)', 'External link (not opened in the viewer)')}: ${href}`)
     return
   }
 
   const clean = decodeURIComponent(href.split('#')[0])
   if (!/\.(md|markdown|mdown|mkd|txt)$/i.test(clean)) {
-    showMessage(`Solo puedo navegar a otros archivos Markdown: ${href}`)
+    showMessage(`${uiText('Solo puedo navegar a otros archivos Markdown', 'I can only navigate to other Markdown files')}: ${href}`)
     return
   }
 
   const base = state.filePath ? state.filePath.replace(/\/[^/]*$/, '') : state.folder
   if (!base && !clean.startsWith('/')) {
-    showMessage('No conozco la ruta base para resolver este enlace.')
+    showMessage(uiText('No conozco la ruta base para resolver este enlace.', 'I do not know the base path needed to resolve this link.'))
     return
   }
   void loadFileFromPath(resolvePath(base, clean))
@@ -1432,7 +1943,7 @@ async function rerenderFromEditor() {
 
 async function saveDocument() {
   if (!state.filePath) {
-    showMessage('Este documento no tiene ruta en disco; abrelo desde el dialogo o el arbol para poder guardar.')
+    showMessage(uiText('Este documento no tiene ruta en disco; ábrelo desde el diálogo o el árbol para poder guardar.', 'This document has no disk path; open it from the dialog or the tree to save it.'))
     return
   }
   try {
@@ -1441,34 +1952,38 @@ async function saveDocument() {
     state.markdown = markdown
     state.dirty = false
     renderDocumentTabs()
-    showMessage(`Guardado: ${state.fileName}`)
+    showMessage(`${uiText('Guardado', 'Saved')}: ${state.fileName}`)
     setTimeout(hideMessage, 2200)
   } catch (error) {
-    showMessage('No pude guardar: ' + formatError(error))
+    showMessage(`${uiText('No pude guardar: ', 'Could not save: ')}${formatError(error)}`)
   }
 }
 
 // ---------- Menu de formato (WYSIWYG, con toggle) ----------
 
 const FORMAT_ACTIONS = [
-  { label: 'Negrita', hint: 'B', run: () => document.execCommand('bold') },
-  { label: 'Cursiva', hint: 'I', run: () => document.execCommand('italic') },
-  { label: 'Tachado', hint: 'S', run: () => document.execCommand('strikeThrough') },
-  { label: 'Codigo inline', hint: '</>', run: toggleInlineCode },
-  { label: 'Titulo 1', hint: 'H1', run: () => toggleBlock('H1') },
-  { label: 'Titulo 2', hint: 'H2', run: () => toggleBlock('H2') },
-  { label: 'Titulo 3', hint: 'H3', run: () => toggleBlock('H3') },
-  { label: 'Parrafo normal', hint: 'P', run: () => document.execCommand('formatBlock', false, 'P') },
-  { label: 'Cita', hint: '>', run: () => toggleBlock('BLOCKQUOTE') },
-  { label: 'Lista', hint: '•', run: () => document.execCommand('insertUnorderedList') },
-  { label: 'Lista numerada', hint: '1.', run: () => document.execCommand('insertOrderedList') },
-  { label: 'Quitar formato', hint: '×', run: () => document.execCommand('removeFormat') },
+  { key: 'bold', hint: 'B', run: () => document.execCommand('bold') },
+  { key: 'italic', hint: 'I', run: () => document.execCommand('italic') },
+  { key: 'strike', hint: 'S', run: () => document.execCommand('strikeThrough') },
+  { key: 'inlineCode', hint: '</>', run: toggleInlineCode },
+  { key: 'headingOne', hint: 'H1', run: () => toggleBlock('H1') },
+  { key: 'headingTwo', hint: 'H2', run: () => toggleBlock('H2') },
+  { key: 'headingThree', hint: 'H3', run: () => toggleBlock('H3') },
+  { key: 'paragraph', hint: 'P', run: () => document.execCommand('formatBlock', false, 'P') },
+  { key: 'quote', hint: '>', run: () => toggleBlock('BLOCKQUOTE') },
+  { key: 'bulletList', hint: '•', run: () => document.execCommand('insertUnorderedList') },
+  { key: 'numberedList', hint: '1.', run: () => document.execCommand('insertOrderedList') },
+  { key: 'removeFormat', hint: '×', run: () => document.execCommand('removeFormat') },
 ]
 
-formatMenu.innerHTML = FORMAT_ACTIONS.map(
-  (action, index) =>
-    `<button type="button" data-action="${index}"><span>${action.label}</span><code>${escapeHtml(action.hint)}</code></button>`,
-).join('')
+function renderFormatMenu() {
+  formatMenu.innerHTML = FORMAT_ACTIONS.map(
+    (action, index) =>
+      `<button type="button" data-action="${index}" data-action-key="${action.key}"><span>${escapeHtml(t(action.key))}</span><code>${escapeHtml(action.hint)}</code></button>`,
+  ).join('')
+}
+
+renderFormatMenu()
 
 function toggleBlock(tag) {
   const current = document.getSelection().anchorNode
@@ -1678,7 +2193,7 @@ function removeHighlight() {
 
 async function persistHighlights() {
   if (!state.filePath) {
-    showMessage('Resaltado aplicado solo en pantalla: este documento no tiene ruta en disco.')
+    showMessage(uiText('Resaltado aplicado solo en pantalla: este documento no tiene ruta en disco.', 'Highlight applied on screen only: this document has no disk path.'))
     return
   }
   try {
@@ -1686,7 +2201,7 @@ async function persistHighlights() {
     await invoke('save_markdown_file', { path: state.filePath, contents: markdown })
     state.markdown = markdown
   } catch (error) {
-    showMessage('No pude guardar el resaltado: ' + formatError(error))
+    showMessage(`${uiText('No pude guardar el resaltado: ', 'Could not save the highlight: ')}${formatError(error)}`)
   }
 }
 
@@ -1770,9 +2285,74 @@ function decorateRenderedContent() {
   }
 
   void renderMermaidBlocks(reader)
+  void hydrateMarkdownImages(reader, state.filePath, state.loadGeneration)
   const blocks = reader.querySelectorAll('pre code:not(.language-mermaid)')
   for (let index = 0; index < blocks.length; index += 1) {
     hljs.highlightElement(blocks[index])
+  }
+}
+
+async function refreshMermaidTheme() {
+  if (state.mode !== 'read') return
+  if (state.documentKind === 'mermaid') {
+    try { await renderMermaidDocument(reader, state.markdown) } catch (_) { return }
+    return
+  }
+  if (!reader.querySelector('.inline-diagram') || !state.html) return
+  cleanupMarkdownImages()
+  reader.innerHTML = state.html
+  decorateRenderedContent()
+  renderToc()
+  runSearch(searchInput.value)
+}
+
+function cleanupMarkdownImages() {
+  for (const url of reader._markdownImageUrls || []) URL.revokeObjectURL(url)
+  reader._markdownImageUrls = []
+}
+
+function resolveMarkdownImagePath(filePath, source) {
+  const clean = source.split(/[?#]/)[0]
+  if (!clean || clean.startsWith('#')) return ''
+  if (/^[a-z][a-z\d+.-]*:/i.test(clean) && !/^[a-z]:[\\/]/i.test(clean)) {
+    if (!clean.toLowerCase().startsWith('file://')) return ''
+    try { return decodeURIComponent(new URL(clean).pathname) } catch (_) { return '' }
+  }
+  if (clean.startsWith('/') || /^[a-z]:[\\/]/i.test(clean)) {
+    try { return decodeURIComponent(clean) } catch (_) { return '' }
+  }
+  if (!filePath) return ''
+  const base = filePath.replace(/[\\/][^\\/]*$/, '').replace(/\\/g, '/')
+  try { return resolvePath(base, decodeURIComponent(clean.replace(/\\/g, '/'))) } catch (_) { return '' }
+}
+
+function imageMimeType(path) {
+  const extension = path.split('.').pop().toLowerCase()
+  return ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', avif: 'image/avif' })[extension] || 'image/png'
+}
+
+async function hydrateMarkdownImages(root, filePath, generation) {
+  if (!filePath) return
+  const images = Array.from(root.querySelectorAll('img[src]'))
+  for (const image of images) {
+    const source = image.getAttribute('src') || ''
+    const path = resolveMarkdownImagePath(filePath, source)
+    if (!path) continue
+    image.loading = 'lazy'
+    image.decoding = 'async'
+    image.classList.add('markdown-image-loading')
+    try {
+      const payload = await invoke('read_binary_document', { path })
+      if (generation !== state.loadGeneration || !root.contains(image)) return
+      const url = URL.createObjectURL(new Blob([decodeBase64(payload.base64)], { type: imageMimeType(path) }))
+      reader._markdownImageUrls.push(url)
+      image.src = url
+      image.dataset.sourcePath = path
+      image.classList.remove('markdown-image-loading')
+    } catch (_) {
+      image.classList.remove('markdown-image-loading')
+      image.title = uiText('No se pudo cargar esta imagen.', 'This image could not be loaded.')
+    }
   }
 }
 
@@ -1780,15 +2360,15 @@ function updateMeta() {
   fileNameLabel.textContent = state.fileName
   const lines = state.markdown.split('\n').length
   const words = state.markdown.trim().split(/\s+/).filter(Boolean).length
-  metaInfo.textContent = `${words} palabras · ${lines} lineas`
+  metaInfo.textContent = `${words} ${t('words')} · ${lines} ${t('lines')}`
 }
 
 function renderToc() {
   const headings = Array.prototype.slice.call(reader.querySelectorAll('h1, h2, h3, h4, h5, h6'))
-  tocCount.textContent = `${headings.length} secciones`
+  tocCount.textContent = `${headings.length} ${t('sections')}`
 
   if (!headings.length) {
-    toc.innerHTML = '<p class="muted">El documento no tiene encabezados.</p>'
+    toc.innerHTML = `<p class="muted">${t('noHeadings')}</p>`
     return
   }
 
@@ -1906,24 +2486,41 @@ function activateMatch(index) {
 // ---------- Apertura rápida, búsqueda global y referencias ----------
 
 const PALETTE_COMMANDS = [
-  { label: 'Abrir archivo', hint: 'Selector del sistema', run: () => void openMarkdown() },
-  { label: 'Abrir carpeta', hint: 'Cambiar biblioteca', run: () => void openFolder() },
-  { label: 'Buscar en carpeta', hint: 'Ctrl+Shift+F', run: () => openPalette('search') },
-  { label: 'Mostrar u ocultar panel lateral', hint: 'Navegación', run: () => toggleSidebar() },
-  { label: 'Abrir Codex', hint: 'Asistente local', run: () => void openCodexPanel() },
-  { label: 'Cambiar tema', hint: 'Claro / oscuro', run: () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
+  { labelKey: 'newNote', hintKey: 'currentLibrary', run: openNewNoteDialog },
+  { labelKey: 'quickCapture', hintKey: 'quickCaptureShortcut', run: () => openQuickCapture() },
+  { labelKey: 'openInbox', hintKey: 'pendingCaptures', run: () => void openInbox() },
+  { labelKey: 'openFile', hintKey: 'systemPicker', run: () => void openMarkdown() },
+  { labelKey: 'openFolder', hintKey: 'changeLibrary', run: () => void openFolder() },
+  { labelKey: 'folderSearch', hintKey: 'folderNavigationShortcut', run: () => openPalette('search') },
+  { labelKey: 'sidebarToggle', hintKey: 'navigation', run: () => toggleSidebar() },
+  { labelKey: 'openCodex', hintKey: 'localAssistant', run: () => void openCodexPanel() },
+  { labelKey: 'changeTheme', hintKey: 'themeModes', run: () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
 ]
+
+function paletteLabel(item) {
+  return item.labelKey ? t(item.labelKey, item.labelKey) : item.label
+}
+
+function paletteItemHint(item) {
+  return item.hintKey ? t(item.hintKey, item.hintKey) : item.hint
+}
+
+function paletteHintText() {
+  if (state.paletteMode === 'search') return uiText('Busca en Markdown, texto, CSV y Mermaid', 'Search Markdown, text, CSV and Mermaid')
+  if (state.paletteMode === 'commands') return uiText('Acciones disponibles', 'Available actions')
+  return state.language === 'en' ? `${state.documentIndex.length} indexed documents` : `${state.documentIndex.length} documentos indexados`
+}
 
 function openPalette(mode = 'files') {
   if (!state.folder && mode !== 'commands') {
-    showMessage('Abre una carpeta para usar esta función.')
+    showMessage(uiText('Abre una carpeta para usar esta función.', 'Open a folder to use this feature.'))
     return
   }
   state.paletteMode = mode
   commandPalette.classList.remove('hidden')
   paletteInput.value = ''
-  paletteInput.placeholder = mode === 'search' ? 'Buscar texto en toda la carpeta…' : mode === 'commands' ? 'Ejecutar comando…' : 'Abrir documento…'
-  paletteHint.textContent = mode === 'search' ? 'Busca en Markdown, texto, CSV y Mermaid' : mode === 'commands' ? 'Acciones disponibles' : `${state.documentIndex.length} documentos indexados`
+  paletteInput.placeholder = mode === 'search' ? uiText('Buscar texto en toda la carpeta…', 'Search text across the folder…') : mode === 'commands' ? uiText('Ejecutar comando…', 'Run command…') : t('paletteOpenPlaceholder')
+  paletteHint.textContent = paletteHintText()
   renderPaletteResults('')
   window.setTimeout(() => paletteInput.focus(), 0)
 }
@@ -1963,7 +2560,7 @@ paletteInput.addEventListener('keydown', (event) => {
 
 function paletteEntries(query) {
   const term = query.trim().toLowerCase()
-  if (state.paletteMode === 'commands') return PALETTE_COMMANDS.filter((item) => !term || `${item.label} ${item.hint}`.toLowerCase().includes(term))
+  if (state.paletteMode === 'commands') return PALETTE_COMMANDS.filter((item) => !term || `${paletteLabel(item)} ${paletteItemHint(item)}`.toLowerCase().includes(term))
   if (state.paletteMode === 'files') return state.documentIndex.filter((item) => !term || relativePath(item.path).toLowerCase().includes(term)).slice(0, 80)
   if (!term) return []
   return state.documentIndex.filter((item) => `${item.name}\n${item.searchableText || ''}`.toLowerCase().includes(term)).slice(0, 100)
@@ -1972,13 +2569,13 @@ function paletteEntries(query) {
 function renderPaletteResults(query) {
   const results = paletteEntries(query)
   if (!results.length) {
-    paletteResults.innerHTML = `<p class="palette-empty">${state.paletteMode === 'search' && !query ? 'Escribe una palabra o frase.' : 'No se encontraron resultados.'}</p>`
+    paletteResults.innerHTML = `<p class="palette-empty">${state.paletteMode === 'search' && !query ? t('typeToSearch') : t('noResults')}</p>`
     return
   }
   paletteResults.innerHTML = results.map((item, index) => {
     const isCommand = state.paletteMode === 'commands'
-    const snippet = isCommand ? item.hint : state.paletteMode === 'search' ? searchSnippet(item.searchableText || '', query) : relativePath(item.path)
-    return `<button class="palette-result${index === 0 ? ' active' : ''}" data-palette-index="${index}" type="button"><span><strong>${escapeHtml(item.label || item.name)}</strong><small>${escapeHtml(snippet)}</small></span><em>${escapeHtml(isCommand ? 'Comando' : item.kind)}</em></button>`
+    const snippet = isCommand ? paletteItemHint(item) : state.paletteMode === 'search' ? searchSnippet(item.searchableText || '', query) : relativePath(item.path)
+    return `<button class="palette-result${index === 0 ? ' active' : ''}" data-palette-index="${index}" type="button"><span><strong>${escapeHtml(isCommand ? paletteLabel(item) : item.label || item.name)}</strong><small>${escapeHtml(snippet)}</small></span><em>${escapeHtml(isCommand ? uiText('Comando', 'Command') : item.kind)}</em></button>`
   }).join('')
 }
 
@@ -2003,7 +2600,7 @@ function resolveIndexedReference(sourcePath, reference) {
 function renderReferences() {
   if (state.documentKind !== 'markdown' || !state.filePath) {
     referenceCount.textContent = '0'
-    referencesBox.innerHTML = '<p class="muted">Las referencias se calculan para Markdown.</p>'
+    referencesBox.innerHTML = `<p class="muted">${t('referencesMarkdown')}</p>`
     return
   }
   const current = state.documentIndex.find((item) => item.path === state.filePath)
@@ -2012,9 +2609,9 @@ function renderReferences() {
   referenceCount.textContent = String(outgoing.length + backlinks.length)
   const outgoingHtml = outgoing.length ? outgoing.map(({ reference, target }) => target
     ? `<button class="reference-link" data-path="${escapeHtml(target.path)}" type="button">→ ${escapeHtml(reference)}</button>`
-    : `<span class="reference-link broken" title="Enlace no resuelto">⚠ ${escapeHtml(reference)}</span>`).join('') : '<p class="muted">Sin enlaces salientes.</p>'
-  const backlinksHtml = backlinks.length ? backlinks.map((item) => `<button class="reference-link" data-path="${escapeHtml(item.path)}" type="button">← ${escapeHtml(item.name)}</button>`).join('') : '<p class="muted">Sin backlinks.</p>'
-  referencesBox.innerHTML = `<p class="reference-heading">Enlaces</p>${outgoingHtml}<p class="reference-heading">Backlinks</p>${backlinksHtml}`
+    : `<span class="reference-link broken" title="${escapeHtml(t('unresolvedLink'))}">⚠ ${escapeHtml(reference)}</span>`).join('') : `<p class="muted">${t('noOutgoing')}</p>`
+  const backlinksHtml = backlinks.length ? backlinks.map((item) => `<button class="reference-link" data-path="${escapeHtml(item.path)}" type="button">← ${escapeHtml(item.name)}</button>`).join('') : `<p class="muted">${t('noBacklinks')}</p>`
+  referencesBox.innerHTML = `<p class="reference-heading">${uiText('Enlaces', 'Links')}</p>${outgoingHtml}<p class="reference-heading">${t('backlinks')}</p>${backlinksHtml}`
 }
 
 referencesBox.addEventListener('click', (event) => {
@@ -2026,6 +2623,10 @@ if (!onboardingCompleted()) window.setTimeout(() => onboarding.start(), 450)
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !commandPalette.classList.contains('hidden')) closePalette()
+  if (event.key === 'Escape' && !inboxView.classList.contains('hidden')) inboxView.classList.add('hidden')
+  if (event.key === 'Escape' && !newNoteModal.classList.contains('hidden')) closeNewNoteDialog()
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') { event.preventDefault(); openNewNoteDialog() }
+  if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === 'Space') { event.preventDefault(); openQuickCapture() }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') { event.preventDefault(); openPalette('files') }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openPalette('commands') }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'f') { event.preventDefault(); openPalette('search') }
@@ -2061,6 +2662,37 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;')
 }
 
+const BACKEND_ERROR_TRANSLATIONS = [
+  ['No se puede localizar el archivo:', 'Could not locate the file:'],
+  ['No se pudo abrir el explorador de archivos:', 'Could not open the file manager:'],
+  ['No se pudo resolver la configuración:', 'Could not resolve the configuration:'],
+  ['La configuración del Inbox no está disponible', 'Inbox configuration is unavailable'],
+  ['La carpeta del Inbox debe usar una ruta absoluta', 'The Inbox folder must use an absolute path'],
+  ['Nombre de elemento inválido', 'Invalid item name'],
+  ['El nombre no puede contener rutas', 'The name cannot contain path separators'],
+  ['El elemento del Inbox no existe', 'The Inbox item does not exist'],
+  ['El elemento está fuera del Inbox', 'The item is outside the Inbox'],
+  ['Elige primero una carpeta para el Inbox', 'Choose an Inbox folder first'],
+  ['La captura está vacía', 'The capture is empty'],
+  ['Atajo global inválido', 'Invalid global shortcut'],
+  ['No se pudo registrar el atajo:', 'Could not register the shortcut:'],
+  ['La URL debe comenzar por http:// o https://', 'The URL must start with http:// or https://'],
+  ['No es un archivo válido:', 'Not a valid file:'],
+  ['Ya existe un elemento con ese nombre', 'An item with that name already exists'],
+  ['La carpeta de destino no es válida', 'The destination folder is not valid'],
+  ['El Inbox no elimina carpetas', 'Inbox does not delete folders'],
+  ['Escribe un título para la página', 'Enter a title for the page'],
+  ['El título no puede superar 120 caracteres', 'The title cannot exceed 120 characters'],
+  ['El título contiene caracteres no permitidos', 'The title contains invalid characters'],
+  ['El título no produce un nombre de archivo válido', 'The title does not produce a valid file name'],
+  ['Ese nombre está reservado por el sistema', 'That name is reserved by the operating system'],
+  ['Abre una carpeta válida antes de crear una página', 'Open a valid folder before creating a page'],
+  ['Ya existe una página llamada ', 'A page named '],
+]
+
 function formatError(error) {
-  return error instanceof Error ? error.message : typeof error === 'string' ? error : 'error desconocido'
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : t('unknownError')
+  if (state.language !== 'en') return message
+  const translation = BACKEND_ERROR_TRANSLATIONS.find(([source]) => message.startsWith(source))
+  return translation ? translation[1] + message.slice(translation[0].length) : message
 }
