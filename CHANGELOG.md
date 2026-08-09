@@ -2,6 +2,18 @@
 
 Todos los cambios relevantes de Pliego se documentan en este archivo. El proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-08-07
+
+### Pliego Inbox
+
+- Captura rápida global con `Ctrl+Alt+Space`, disponible aunque la ventana principal esté oculta o minimizada.
+- Captura local de texto, URL, portapapeles y archivos, sin depender de Codex ni de una base de datos propietaria.
+- Carpeta Inbox elegible por el usuario y atajo global configurable desde Ajustes.
+- Contador de pendientes, vista previa textual bajo demanda y acciones para abrir, renombrar, mover, archivar o eliminar.
+- Navegación por teclado con flechas, Inicio/Fin, Enter y atajos para las acciones frecuentes.
+- Validación de rutas, límites de vista previa y arranque tolerante a conflictos con atajos ya registrados.
+- Creación de nuevas páginas Markdown desde la biblioteca actual con `Ctrl+N`, validación segura y apertura inmediata en edición.
+
 ## [1.2.0] - 2026-07-18
 
 ### Experiencia inicial
@@ -89,3 +101,4 @@ Primera versión pública de Pliego, una biblioteca documental visual y local pa
 [1.0.1]: https://github.com/RaulLzn/pliego/releases/tag/v1.0.1
 [1.1.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.1.0
 [1.2.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.2.0
+[1.3.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.3.0

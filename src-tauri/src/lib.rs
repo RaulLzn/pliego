@@ -1,11 +1,13 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use pulldown_cmark::{html, Options, Parser};
 use serde::Serialize;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use tauri::Manager;
 
 mod codex;
+mod inbox;
 
 const MAX_VISUAL_FILE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_TEXT_FILE_BYTES: u64 = 32 * 1024 * 1024;
@@ -51,6 +53,13 @@ struct BinaryPayload {
     file_name: String,
     kind: String,
     base64: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CreatedMarkdown {
+    file_name: String,
+    path: String,
 }
 
 fn is_markdown(path: &Path) -> bool {
@@ -253,8 +262,128 @@ fn read_binary_document(path: String) -> Result<BinaryPayload, String> {
 }
 
 #[tauri::command]
+fn open_file_in_folder(path: String) -> Result<(), String> {
+    let file_path = Path::new(&path)
+        .canonicalize()
+        .map_err(|error| format!("No se puede localizar el archivo: {error}"))?;
+    let folder = if file_path.is_dir() {
+        file_path.clone()
+    } else {
+        file_path
+            .parent()
+            .ok_or_else(|| "El archivo no tiene una carpeta contenedora".to_string())?
+            .to_path_buf()
+    };
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer.exe");
+        if file_path.is_file() {
+            command.arg(format!("/select,{}", file_path.display()));
+        } else {
+            command.arg(&folder);
+        }
+        command
+    };
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        if file_path.is_file() {
+            command.arg("-R").arg(&file_path);
+        } else {
+            command.arg(&folder);
+        }
+        command
+    };
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = Command::new("xdg-open");
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    command.arg(&folder);
+
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("No se pudo abrir el explorador de archivos: {error}"))
+}
+
+#[tauri::command]
 fn save_markdown_file(path: String, contents: String) -> Result<(), String> {
     std::fs::write(&path, contents).map_err(|error| error.to_string())
+}
+
+fn markdown_name_from_title(title: &str) -> Result<(String, String), String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("Escribe un título para la página".to_string());
+    }
+    if title.chars().count() > 120 {
+        return Err("El título no puede superar 120 caracteres".to_string());
+    }
+    if title.chars().any(|ch| {
+        ch.is_control() || matches!(ch, '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*')
+    }) {
+        return Err("El título contiene caracteres no permitidos".to_string());
+    }
+    let lowercase = title.to_ascii_lowercase();
+    let clean_title = [".markdown", ".mdown", ".mkd", ".md"]
+        .iter()
+        .find_map(|extension| {
+            lowercase
+                .strip_suffix(extension)
+                .map(|_| &title[..title.len() - extension.len()])
+        })
+        .unwrap_or(title)
+        .trim()
+        .trim_end_matches('.')
+        .trim();
+    if clean_title.is_empty() || matches!(clean_title, "." | "..") {
+        return Err("El título no produce un nombre de archivo válido".to_string());
+    }
+    let reserved = clean_title.to_ascii_uppercase();
+    let reserved = reserved.split('.').next().unwrap_or_default();
+    if matches!(reserved, "CON" | "PRN" | "AUX" | "NUL")
+        || (reserved.len() == 4
+            && (reserved.starts_with("COM") || reserved.starts_with("LPT"))
+            && reserved.as_bytes()[3].is_ascii_digit())
+    {
+        return Err("Ese nombre está reservado por el sistema".to_string());
+    }
+    Ok((clean_title.to_string(), format!("{clean_title}.md")))
+}
+
+fn create_markdown_at(folder: &Path, title: &str) -> Result<CreatedMarkdown, String> {
+    if !folder.is_absolute() || !folder.is_dir() {
+        return Err("Abre una carpeta válida antes de crear una página".to_string());
+    }
+    let root = folder.canonicalize().map_err(|error| error.to_string())?;
+    let (heading, file_name) = markdown_name_from_title(title)?;
+    let path = root.join(&file_name);
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                format!("Ya existe una página llamada {file_name}")
+            } else {
+                error.to_string()
+            }
+        })?;
+    file.write_all(format!("# {heading}\n\n").as_bytes())
+        .map_err(|error| error.to_string())?;
+    file.sync_all().map_err(|error| error.to_string())?;
+    Ok(CreatedMarkdown {
+        file_name,
+        path: path.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+fn create_markdown_file(folder: String, title: String) -> Result<CreatedMarkdown, String> {
+    create_markdown_at(Path::new(&folder), &title)
 }
 
 #[tauri::command]
@@ -549,6 +678,36 @@ mod tests {
         assert!(entries.iter().any(|entry| entry.kind == "epub"));
         std::fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn creates_a_new_markdown_page_without_overwriting() {
+        let root = std::env::temp_dir().join(format!("pliego-create-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let created = create_markdown_at(&root, "Idea del proyecto.md").unwrap();
+        assert_eq!(created.file_name, "Idea del proyecto.md");
+        assert_eq!(
+            std::fs::read_to_string(&created.path).unwrap(),
+            "# Idea del proyecto\n\n"
+        );
+        assert!(create_markdown_at(&root, "Idea del proyecto").is_err());
+        assert_eq!(
+            std::fs::read_to_string(&created.path).unwrap(),
+            "# Idea del proyecto\n\n"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_unsafe_or_reserved_page_titles() {
+        assert!(markdown_name_from_title("../secreto").is_err());
+        assert!(markdown_name_from_title("carpeta/nota").is_err());
+        assert!(markdown_name_from_title("CON").is_err());
+        assert!(markdown_name_from_title("   ").is_err());
+        assert_eq!(
+            markdown_name_from_title("Plan 1.3").unwrap().1,
+            "Plan 1.3.md"
+        );
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -556,6 +715,16 @@ pub fn run() {
     tauri::Builder::default()
         .manage(codex::CodexManager::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        inbox::handle_shortcut(app);
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -563,6 +732,12 @@ pub fn run() {
                         .level(log::LevelFilter::Info)
                         .build(),
                 )?;
+            }
+            let inbox_state =
+                inbox::InboxState::initialize(app.handle()).map_err(std::io::Error::other)?;
+            app.manage(inbox_state);
+            if let Err(error) = inbox::register_configured_shortcut(app.handle()) {
+                eprintln!("Pliego Inbox: {error}");
             }
             Ok(())
         })
@@ -573,7 +748,22 @@ pub fn run() {
             list_markdown_tree,
             list_document_index,
             read_binary_document,
+            open_file_in_folder,
             save_markdown_file,
+            create_markdown_file,
+            inbox::inbox_get_config,
+            inbox::inbox_set_folder,
+            inbox::inbox_set_shortcut,
+            inbox::inbox_capture_text,
+            inbox::inbox_capture_url,
+            inbox::inbox_capture_clipboard,
+            inbox::inbox_import_files,
+            inbox::inbox_list,
+            inbox::inbox_read_preview,
+            inbox::inbox_rename,
+            inbox::inbox_archive,
+            inbox::inbox_move,
+            inbox::inbox_delete,
             codex::codex_status,
             codex::codex_models,
             codex::codex_open_context,
