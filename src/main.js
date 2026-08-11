@@ -1533,10 +1533,8 @@ window.addEventListener('keydown', (event) => {
 
 async function loadInitialFile() {
   try {
-    const path = await invoke('get_launch_path')
-    if (typeof path === 'string' && path.length > 0) {
-      await loadFileFromPath(path)
-    }
+    const paths = await invoke('get_launch_paths')
+    await openSystemFiles(paths)
   } catch (_) {
     // Fuera de Tauri.
   }
@@ -1544,6 +1542,12 @@ async function loadInitialFile() {
   if (savedFolder) {
     void loadFolder(savedFolder)
   }
+}
+
+async function openSystemFiles(paths) {
+  if (!Array.isArray(paths)) return
+  const uniquePaths = [...new Set(paths.filter((path) => typeof path === 'string' && path.length > 0))]
+  for (const path of uniquePaths) await loadFileFromPath(path)
 }
 
 async function loadBrowserFile(file) {
@@ -2267,7 +2271,14 @@ async function listenTauriDragDrop() {
 
 // ---------- Render, indice y busqueda ----------
 
-void loadInitialFile()
+void (async () => {
+  try {
+    await listen('open-files', (event) => { void openSystemFiles(event.payload) })
+  } catch (_) {
+    // Fuera de Tauri.
+  }
+  await loadInitialFile()
+})()
 
 window.addEventListener('beforeunload', () => {
   reader._visualCleanup?.()
