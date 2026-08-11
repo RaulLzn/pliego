@@ -2,6 +2,14 @@
 
 Todos los cambios relevantes de Pliego se documentan en este archivo. El proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-08-11
+
+### Integración con el sistema operativo
+
+- Pliego aparece como aplicación compatible en “Abrir con” para sus formatos soportados en paquetes Linux.
+- Los archivos entregados por Linux, Windows y macOS al iniciar la aplicación se abren directamente, con soporte para selecciones múltiples.
+- macOS también atiende aperturas posteriores mediante el evento nativo de archivos de Tauri.
+
 ## [1.3.0] - 2026-08-07
 
 ### Pliego Inbox
@@ -102,3 +110,4 @@ Primera versión pública de Pliego, una biblioteca documental visual y local pa
 [1.1.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.1.0
 [1.2.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.2.0
 [1.3.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.3.0
+[1.4.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.4.0

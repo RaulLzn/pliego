@@ -1,9 +1,14 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use pulldown_cmark::{html, Options, Parser};
 use serde::Serialize;
+use std::collections::HashSet;
+use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
+#[cfg(target_os = "macos")]
+use tauri::Emitter;
 use tauri::Manager;
 
 mod codex;
@@ -21,11 +26,31 @@ struct FilePayload {
     html: String,
 }
 
+#[derive(Default)]
+struct PendingOpenPaths(Mutex<Vec<String>>);
+
+fn launch_paths_from_args(args: impl IntoIterator<Item = OsString>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    args.into_iter()
+        .skip(1)
+        .map(PathBuf::from)
+        .filter(|path| path.is_file() && is_document(path))
+        .filter_map(|path| path.canonicalize().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+        .filter(|path| seen.insert(path.clone()))
+        .collect()
+}
+
 #[tauri::command]
-fn get_launch_path() -> Option<String> {
-    std::env::args()
-        .nth(1)
-        .filter(|value| Path::new(value).is_file())
+fn get_launch_paths(pending: tauri::State<'_, PendingOpenPaths>) -> Vec<String> {
+    let mut paths = launch_paths_from_args(std::env::args_os());
+    let mut queued = pending.0.lock().unwrap_or_else(|error| error.into_inner());
+    for path in queued.drain(..) {
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    paths
 }
 
 #[derive(Serialize)]
@@ -708,12 +733,39 @@ mod tests {
             "Plan 1.3.md"
         );
     }
+
+    #[test]
+    fn collects_supported_launch_files_and_ignores_other_arguments() {
+        let root = std::env::temp_dir().join(format!("pliego-launch-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let markdown = root.join("nota.md");
+        let pdf = root.join("informe.pdf");
+        let unsupported = root.join("archivo.zip");
+        std::fs::write(&markdown, "# Nota").unwrap();
+        std::fs::write(&pdf, b"fake pdf").unwrap();
+        std::fs::write(&unsupported, b"fake zip").unwrap();
+
+        let paths = launch_paths_from_args([
+            OsString::from("pliego"),
+            OsString::from("--flag"),
+            markdown.as_os_str().to_owned(),
+            unsupported.as_os_str().to_owned(),
+            pdf.as_os_str().to_owned(),
+            markdown.as_os_str().to_owned(),
+        ]);
+
+        assert_eq!(paths.len(), 2);
+        assert!(paths.iter().any(|path| path.ends_with("nota.md")));
+        assert!(paths.iter().any(|path| path.ends_with("informe.pdf")));
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(codex::CodexManager::default())
+        .manage(PendingOpenPaths::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
@@ -742,7 +794,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_launch_path,
+            get_launch_paths,
             read_markdown_file,
             render_markdown_text,
             list_markdown_tree,
@@ -775,9 +827,32 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
-            if matches!(event, tauri::RunEvent::Exit) {
+            if matches!(&event, tauri::RunEvent::Exit) {
                 let manager = app.state::<codex::CodexManager>();
                 let _ = codex::stop_runtime(&manager);
+            }
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                let paths: Vec<String> = urls
+                    .iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .filter(|path| path.is_file() && is_document(path))
+                    .filter_map(|path| path.canonicalize().ok())
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .collect();
+                if !paths.is_empty() {
+                    let pending = app.state::<PendingOpenPaths>();
+                    pending
+                        .0
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner())
+                        .extend(paths.clone());
+                    let _ = app.emit("open-files", &paths);
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
             }
         });
 }
