@@ -24,4 +24,21 @@ El workflow `release.yml` valida que el tag coincida con la versión y crea una 
 
 ## Firma de código
 
-Los builds funcionan sin secretos. Para eliminar advertencias de instalación en macOS y Windows deben configurarse posteriormente certificados de firma y notarización siguiendo la documentación oficial de Tauri.
+### macOS
+
+Pliego usa exclusivamente una firma ad hoc para sus bundles de macOS. No requiere cuenta, certificado, clave ni membresía paga de Apple. La pseudoidentidad `-` configurada en Tauri aporta integridad al bundle y evita que los builds para Apple Silicon descargados desde GitHub aparezcan como dañados.
+
+La firma ad hoc no identifica al desarrollador ni satisface la política de confianza de Gatekeeper. Después de copiar Pliego a Aplicaciones, el usuario debe intentar abrirlo una vez y autorizarlo en **Configuración del Sistema → Privacidad y seguridad → Abrir igualmente**. Ese botón aparece temporalmente después del intento bloqueado.
+
+El runner macOS valida que la aplicación completa tenga una firma ad hoc íntegra:
+
+```bash
+codesign --verify --deep --strict --verbose=2 Pliego.app
+codesign --display --verbose=4 Pliego.app
+```
+
+La release permanece como borrador hasta que los jobs de ambas arquitecturas macOS validen la firma ad hoc. Después de publicarla, también debe instalarse y abrirse el DMG descargado en un Mac real: la cuarentena aplicada por el navegador es la que activa la evaluación completa de Gatekeeper y no puede reproducirse en los runners de CI.
+
+### Windows
+
+Los builds de Windows continúan sin certificado Authenticode y pueden mostrar una advertencia de SmartScreen.

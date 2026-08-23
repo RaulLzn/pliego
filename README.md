@@ -54,9 +54,9 @@ Download and run the `.exe` or `.msi` installer from the latest release.
 
 ### macOS
 
-Download the `.dmg`, drag Pliego into Applications, and open it. Until the binaries are signed and notarized, macOS may ask you to confirm the first launch under **Privacy & Security**.
+Download the `.dmg` and drag Pliego into Applications. Pliego uses a free ad-hoc signature, so on first launch macOS will block it as an unidentified app. After trying to open it once, go to **System Settings → Privacy & Security → Open Anyway** and confirm.
 
-> Windows and macOS installers may display a warning until the project configures code-signing certificates. Linux packages require no additional configuration.
+> Windows installers may display a SmartScreen warning until the project configures an Authenticode certificate. Linux packages require no additional configuration.
 
 ## Optional Codex integration
 

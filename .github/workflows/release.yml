@@ -82,9 +82,26 @@ jobs:
           releaseBody: |
             Descarga el instalador correspondiente a tu sistema.
 
+            En macOS, copia Pliego a Aplicaciones e intenta abrirlo una vez. Después ve a Configuración del Sistema → Privacidad y seguridad → Abrir igualmente. Los bundles usan firma ad hoc y no requieren una cuenta de Apple Developer.
+
             Consulta CHANGELOG.md para conocer todos los cambios.
           releaseDraft: true
           prerelease: false
           generateReleaseNotes: true
           args: ${{ matrix.args }}
           releaseAssetNamePattern: "Pliego_[version]_[platform]_[arch].[ext]"
+
+      - name: Verify macOS ad-hoc signature
+        if: startsWith(matrix.platform, 'macos')
+        shell: bash
+        run: |
+          app_path=$(find src-tauri/target -type d -path '*/release/bundle/macos/Pliego.app' -print -quit)
+          if [[ -z "$app_path" ]]; then
+            echo "Pliego.app was not produced." >&2
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          signature_details=$(codesign --display --verbose=4 "$app_path" 2>&1)
+          grep -q 'Signature=adhoc' <<< "$signature_details"
+          echo "Verified macOS ad-hoc signature: $app_path"

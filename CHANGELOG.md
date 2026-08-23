@@ -2,6 +2,12 @@
 
 Todos los cambios relevantes de Pliego se documentan en este archivo. El proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-08-23
+
+### Correcciones
+
+- Los bundles de macOS reciben una firma ad hoc gratuita y el workflow valida su integridad para evitar que Apple Silicon los trate como dañados.
+
 ## [1.4.0] - 2026-08-11
 
 ### Integración con el sistema operativo
@@ -111,3 +117,4 @@ Primera versión pública de Pliego, una biblioteca documental visual y local pa
 [1.2.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.2.0
 [1.3.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.3.0
 [1.4.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.4.0
+[1.4.1]: https://github.com/RaulLzn/pliego/releases/tag/v1.4.1
