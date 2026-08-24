@@ -83,6 +83,7 @@ const state = {
   language: localStorage.getItem(LANGUAGE_KEY) || 'es',
   visualInfo: null,
   loadGeneration: 0,
+  folderLoadGeneration: 0,
 }
 
 document.querySelector('#app').innerHTML = `
@@ -530,10 +531,7 @@ inboxPreview.addEventListener('click', (event) => {
 })
 
 document.querySelectorAll('[data-set-theme]').forEach((button) => {
-  button.addEventListener('click', () => {
-    applyTheme(button.dataset.setTheme)
-    localStorage.setItem(THEME_KEY, button.dataset.setTheme)
-  })
+  button.addEventListener('click', () => setTheme(button.dataset.setTheme))
 })
 
 document.querySelectorAll('[data-set-font]').forEach((button) => {
@@ -556,6 +554,11 @@ function applyTheme(theme) {
     button.classList.toggle('active', button.dataset.setTheme === theme)
   })
   if (reader.querySelector('.inline-diagram') || state.documentKind === 'mermaid') window.setTimeout(() => void refreshMermaidTheme(), 0)
+}
+
+function setTheme(theme) {
+  applyTheme(theme)
+  localStorage.setItem(THEME_KEY, theme)
 }
 
 const ACCENT_KEY = 'pliego-accent'
@@ -724,8 +727,9 @@ libraryGrid.addEventListener('click', (event) => {
   if (edit) { openLibraryEditor(edit.dataset.editLibrary); return }
   const card = event.target.closest('[data-library-path]')
   if (!card) return
-  libraryHome.classList.add('hidden')
-  void loadFolder(card.dataset.libraryPath)
+  void (async () => {
+    if (await loadFolder(card.dataset.libraryPath)) libraryHome.classList.add('hidden')
+  })()
 })
 
 const LIBRARY_COLORS = ['#d4962a', '#e06452', '#ed6fa5', '#a779e9', '#6e7ee8', '#3b9de1', '#2ab5a8', '#38b37e', '#8fae36', '#d17a3d']
@@ -980,7 +984,13 @@ async function runInboxAction(action) {
 void listen('pliego://open-inbox-capture', ({ payload }) => openQuickCapture(payload?.text || payload || '')).catch(() => {})
 void refreshInbox()
 
-;[homeRecents, homeFavorites].forEach((container) => container.addEventListener('click', (event) => { const file = event.target.closest('[data-home-file]'); if (!file) return; libraryHome.classList.add('hidden'); void loadFileFromPath(file.dataset.homeFile) }))
+;[homeRecents, homeFavorites].forEach((container) => container.addEventListener('click', (event) => {
+  const file = event.target.closest('[data-home-file]')
+  if (!file) return
+  void (async () => {
+    if (await loadFileFromPath(file.dataset.homeFile)) libraryHome.classList.add('hidden')
+  })()
+}))
 
 applyLanguage(state.language)
 
@@ -1427,7 +1437,7 @@ async function openFolder() {
   try {
     const selected = await openDialog({ directory: true, multiple: false })
     if (typeof selected === 'string' && selected.length > 0) {
-      await loadFolder(selected)
+      if (await loadFolder(selected)) libraryHome.classList.add('hidden')
     }
   } catch (error) {
     showMessage(`${uiText('No pude abrir la carpeta: ', 'Could not open the folder: ')}${formatError(error)}`)
@@ -1435,20 +1445,37 @@ async function openFolder() {
 }
 
 async function loadFolder(dir) {
+  if (state.mode === 'edit' && state.dirty) {
+    showMessage(uiText('Tienes cambios sin guardar. Guarda el documento antes de cambiar de biblioteca.', 'You have unsaved changes. Save the document before changing libraries.'))
+    return false
+  }
+  const folder = typeof dir === 'string' ? dir.trim() : ''
+  if (!folder) return false
+  const generation = ++state.folderLoadGeneration
+  state.loadGeneration += 1
+  showMessage(uiText('Cargando biblioteca…', 'Loading library…'))
   try {
     const [nodes, index] = await Promise.all([
-      invoke('list_markdown_tree', { dir }),
-      invoke('list_document_index', { dir }),
+      invoke('list_markdown_tree', { dir: folder }),
+      invoke('list_document_index', { dir: folder }),
     ])
-    state.folder = dir
+    if (generation !== state.folderLoadGeneration) return false
+    state.folder = folder
     state.documentIndex = Array.isArray(index) ? index : []
     state.treeNodes = Array.isArray(nodes) ? nodes : []
-    addLibrary(dir)
-    localStorage.setItem(FOLDER_KEY, dir)
+    state.openTabs = []
+    clearCurrentDocument()
+    addLibrary(folder)
+    localStorage.setItem(FOLDER_KEY, folder)
     renderTree(nodes)
+    toggleSidebar(true)
+    renderDocumentTabs()
     if (!codexPanel.classList.contains('hidden') && state.codexContext === 'folder') void restoreCodexContext()
+    hideMessage()
+    return true
   } catch (error) {
-    showMessage(`${uiText('No pude leer la carpeta: ', 'Could not read the folder: ')}${formatError(error)}`)
+    if (generation === state.folderLoadGeneration) showMessage(`${uiText('No pude leer la carpeta: ', 'Could not read the folder: ')}${formatError(error)}`)
+    return false
   }
 }
 
@@ -1532,15 +1559,13 @@ window.addEventListener('keydown', (event) => {
 })
 
 async function loadInitialFile() {
+  const savedFolder = localStorage.getItem(FOLDER_KEY)
+  if (savedFolder) await loadFolder(savedFolder)
   try {
     const paths = await invoke('get_launch_paths')
     await openSystemFiles(paths)
   } catch (_) {
     // Fuera de Tauri.
-  }
-  const savedFolder = localStorage.getItem(FOLDER_KEY)
-  if (savedFolder) {
-    void loadFolder(savedFolder)
   }
 }
 
@@ -1571,7 +1596,11 @@ async function loadBrowserFile(file) {
 async function loadFileFromPath(path) {
   if (state.mode === 'edit' && state.dirty) {
     showMessage(uiText('Tienes cambios sin guardar. Guarda o vuelve a Lectura antes de abrir otro archivo.', 'You have unsaved changes. Save them or switch back to Read before opening another file.'))
-    return
+    return false
+  }
+  if (!state.folder || !isPathWithinFolder(path, state.folder)) {
+    const folder = parentFolder(path)
+    if (!folder || !(await loadFolder(folder))) return false
   }
   const generation = beginDocumentLoad()
   try {
@@ -1579,7 +1608,7 @@ async function loadFileFromPath(path) {
     const kind = entry?.kind || kindFromPath(path)
     if (!['markdown', 'text'].includes(kind)) {
       await loadVisualFile(path, kind, entry, generation)
-      return
+      return true
     }
     const payload = await invoke('read_markdown_file', {
       path,
@@ -1588,15 +1617,17 @@ async function loadFileFromPath(path) {
     if (!payload || typeof payload !== 'object') {
       throw new Error(uiText('Respuesta inválida', 'Invalid response'))
     }
-    if (!isCurrentLoad(generation)) return
+    if (!isCurrentLoad(generation)) return false
     state.documentKind = kind
     applyDocument(payload.fileName, path, payload.contents, payload.html)
     renderReferences()
     addRecent(path, payload.fileName)
     hideMessage()
+    return true
   } catch (error) {
-    if (!isCurrentLoad(generation) || error?.name === 'AbortError') return
+    if (!isCurrentLoad(generation) || error?.name === 'AbortError') return false
     showMessage(`${uiText('No pude abrir el archivo seleccionado: ', 'Could not open the selected file: ')}${formatError(error)}`)
+    return false
   }
 }
 
@@ -1622,6 +1653,10 @@ async function loadVisualFile(path, kind, entry, generation) {
   state.frontmatter = ''
   state.dirty = false
   state.mode = 'read'
+  hideFormatMenu()
+  hideHighlightMenu()
+  formatSelectionRange = null
+  highlightSelectionRange = null
   readerWrap.scrollTop = 0
   reader.classList.remove('editing')
   reader.contentEditable = 'false'
@@ -1667,6 +1702,22 @@ function kindFromPath(path) {
   return extension
 }
 
+function normalizedPath(path) {
+  return String(path || '').replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '')
+}
+
+function isPathWithinFolder(path, folder) {
+  const file = normalizedPath(path).toLowerCase()
+  const root = normalizedPath(folder).toLowerCase() || '/'
+  return file === root || file.startsWith(root === '/' ? '/' : `${root}/`)
+}
+
+function parentFolder(path) {
+  const normalized = normalizedPath(path)
+  const slash = normalized.lastIndexOf('/')
+  return slash <= 0 ? '/' : normalized.slice(0, slash)
+}
+
 function splitFrontmatter(markdown) {
   const match = markdown.match(/^---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/)
   return match ? match[0] : ''
@@ -1676,6 +1727,17 @@ function applyDocument(fileName, filePath, markdown, html) {
   reader._visualCleanup?.()
   reader._visualCleanup = null
   cleanupMarkdownImages()
+  state.mode = 'read'
+  reader.contentEditable = 'false'
+  reader.classList.remove('editing')
+  modeReadButton.classList.add('active')
+  modeEditButton.classList.remove('active')
+  modeEditButton.disabled = false
+  saveButton.classList.add('hidden')
+  hideFormatMenu()
+  hideHighlightMenu()
+  formatSelectionRange = null
+  highlightSelectionRange = null
   state.fileName = fileName
   state.filePath = filePath
   state.markdown = markdown
@@ -1753,6 +1815,17 @@ function clearCurrentDocument() {
   state.markdown = ''
   state.visualInfo = null
   state.dirty = false
+  state.mode = 'read'
+  reader.contentEditable = 'false'
+  reader.classList.remove('editing', 'visual-document')
+  modeReadButton.classList.add('active')
+  modeEditButton.classList.remove('active')
+  modeEditButton.disabled = false
+  saveButton.classList.add('hidden')
+  hideFormatMenu()
+  hideHighlightMenu()
+  formatSelectionRange = null
+  highlightSelectionRange = null
   updateFavoriteButton()
   reader.className = 'reader empty'
   cleanupMarkdownImages()
@@ -1911,11 +1984,14 @@ function setMode(mode) {
       reader.classList.remove('empty')
       reader.innerHTML = '<p></p>'
     }
+    hideHighlightMenu()
+    highlightSelectionRange = null
     clearHighlights()
     reader.contentEditable = 'true'
     reader.focus()
   } else {
     hideFormatMenu()
+    formatSelectionRange = null
     reader.contentEditable = 'false'
     if (state.dirty) {
       void rerenderFromEditor()
@@ -2026,49 +2102,83 @@ function toggleInlineCode() {
   state.dirty = true
 }
 
-reader.addEventListener('mouseup', () => {
-  if (state.mode === 'edit') {
-    setTimeout(maybeShowFormatMenu, 10)
-  } else {
-    setTimeout(maybeShowHighlightMenu, 10)
-  }
-})
+let selectionMenuTimer = 0
+let formatSelectionRange = null
+let highlightSelectionRange = null
+
+function scheduleSelectionMenu() {
+  window.clearTimeout(selectionMenuTimer)
+  selectionMenuTimer = window.setTimeout(() => {
+    if (state.mode === 'edit') maybeShowFormatMenu()
+    else maybeShowHighlightMenu()
+  }, 0)
+}
+
+reader.addEventListener('pointerup', scheduleSelectionMenu)
 reader.addEventListener('keyup', (event) => {
   if (state.mode !== 'edit') {
+    if (event.shiftKey) scheduleSelectionMenu()
     return
   }
   if (event.shiftKey || event.key === 'Shift') {
-    maybeShowFormatMenu()
+    scheduleSelectionMenu()
   } else if (document.getSelection().isCollapsed) {
     hideFormatMenu()
   }
 })
 document.addEventListener('selectionchange', () => {
-  if (document.getSelection().isCollapsed) {
+  const selection = document.getSelection()
+  const active = document.activeElement
+  if (!selection || selection.isCollapsed || !selection.rangeCount) {
+    if (active instanceof Element && active.closest('#formatMenu, #highlightMenu')) return
+    formatSelectionRange = null
+    highlightSelectionRange = null
     hideFormatMenu()
     hideHighlightMenu()
   }
 })
 
+function positionSelectionMenu(menu, range) {
+  const rect = range.getBoundingClientRect()
+  const wrap = readerWrap.getBoundingClientRect()
+  menu.classList.remove('hidden')
+  const scrollLeft = readerWrap.scrollLeft
+  const scrollTop = readerWrap.scrollTop
+  const minX = scrollLeft + 8
+  const maxX = Math.max(minX, scrollLeft + readerWrap.clientWidth - menu.offsetWidth - 8)
+  let x = rect.left - wrap.left + scrollLeft + rect.width / 2 - menu.offsetWidth / 2
+  x = Math.max(minX, Math.min(x, maxX))
+  let y = rect.bottom - wrap.top + scrollTop + 10
+  const maxY = scrollTop + readerWrap.clientHeight - menu.offsetHeight - 8
+  if (y > maxY) y = rect.top - wrap.top + scrollTop - menu.offsetHeight - 10
+  y = Math.max(scrollTop + 8, y)
+  menu.style.left = `${x}px`
+  menu.style.top = `${y}px`
+}
+
+function repositionSelectionMenus() {
+  if (!formatMenu.classList.contains('hidden') && formatSelectionRange) positionSelectionMenu(formatMenu, formatSelectionRange)
+  if (!highlightMenu.classList.contains('hidden') && highlightSelectionRange) positionSelectionMenu(highlightMenu, highlightSelectionRange)
+}
+
+readerWrap.addEventListener('scroll', repositionSelectionMenus)
+window.addEventListener('resize', repositionSelectionMenus)
+
 function maybeShowFormatMenu() {
   const selection = document.getSelection()
   if (selection.isCollapsed || !selection.rangeCount) {
     hideFormatMenu()
+    formatSelectionRange = null
     return
   }
   const range = selection.getRangeAt(0)
   if (!reader.contains(range.commonAncestorContainer)) {
     hideFormatMenu()
+    formatSelectionRange = null
     return
   }
-  const rect = range.getBoundingClientRect()
-  const wrap = reader.parentElement.getBoundingClientRect()
-  formatMenu.classList.remove('hidden')
-  let x = rect.left - wrap.left + rect.width / 2 - formatMenu.offsetWidth / 2
-  x = Math.max(8, Math.min(x, wrap.width - formatMenu.offsetWidth - 8))
-  const y = rect.bottom - wrap.top + 10
-  formatMenu.style.left = x + 'px'
-  formatMenu.style.top = y + 'px'
+  formatSelectionRange = range.cloneRange()
+  positionSelectionMenu(formatMenu, formatSelectionRange)
 }
 
 function hideFormatMenu() {
@@ -2083,45 +2193,45 @@ function maybeShowHighlightMenu() {
   const selection = document.getSelection()
   if (selection.isCollapsed || !selection.rangeCount) {
     hideHighlightMenu()
+    highlightSelectionRange = null
     return
   }
   const range = selection.getRangeAt(0)
   if (!reader.contains(range.commonAncestorContainer) || !range.toString().trim()) {
     hideHighlightMenu()
+    highlightSelectionRange = null
     return
   }
-  const rect = range.getBoundingClientRect()
-  const wrap = reader.parentElement.getBoundingClientRect()
-  highlightMenu.classList.remove('hidden')
-  let x = rect.left - wrap.left + rect.width / 2 - highlightMenu.offsetWidth / 2
-  x = Math.max(8, Math.min(x, wrap.width - highlightMenu.offsetWidth - 8))
-  highlightMenu.style.left = x + 'px'
-  highlightMenu.style.top = rect.bottom - wrap.top + 10 + 'px'
+  highlightSelectionRange = range.cloneRange()
+  positionSelectionMenu(highlightMenu, highlightSelectionRange)
 }
 
 function hideHighlightMenu() {
   highlightMenu.classList.add('hidden')
 }
 
-highlightMenu.addEventListener('mousedown', (event) => {
+highlightMenu.addEventListener('pointerdown', (event) => {
+  event.preventDefault()
+})
+
+highlightMenu.addEventListener('click', (event) => {
   event.preventDefault()
   const button = event.target.closest('[data-hl]')
   if (!button) {
     return
   }
+  const range = highlightSelectionRange?.cloneRange()
+  if (!range) return
   if (button.dataset.hl === 'remove') {
-    removeHighlight()
+    removeHighlight(range)
   } else {
-    applyHighlight(button.dataset.hl)
+    applyHighlight(button.dataset.hl, range)
   }
   hideHighlightMenu()
+  highlightSelectionRange = null
   document.getSelection().removeAllRanges()
   void persistHighlights()
 })
-
-function intersectingHighlights(range) {
-  return Array.from(reader.querySelectorAll('mark.hl')).filter((mark) => range.intersectsNode(mark))
-}
 
 function unwrapMark(mark) {
   const parent = mark.parentNode
@@ -2134,65 +2244,64 @@ function unwrapMark(mark) {
   parent.removeChild(mark)
 }
 
-function wrapRangeTextNodes(range, color) {
-  const walker = document.createTreeWalker(reader, NodeFilter.SHOW_TEXT)
+function textNodesIn(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
   const nodes = []
   let node = walker.nextNode()
   while (node) {
-    if (range.intersectsNode(node)) {
-      nodes.push(node)
-    }
+    nodes.push(node)
     node = walker.nextNode()
   }
+  return nodes
+}
 
+function unwrapMarks(root, selector) {
+  const marks = root.querySelectorAll ? Array.from(root.querySelectorAll(selector)).reverse() : []
+  for (const mark of marks) unwrapMark(mark)
+}
+
+function meaningfulTextLength(value) {
+  return String(value || '').replace(/\s/g, '').length
+}
+
+function wrapTextNodesInRoot(root, color) {
+  const nodes = textNodesIn(root)
   for (const textNode of nodes) {
-    const length = textNode.nodeValue ? textNode.nodeValue.length : 0
-    if (!length) {
-      continue
-    }
-    let start = textNode === range.startContainer ? range.startOffset : 0
-    let end = textNode === range.endContainer ? range.endOffset : length
-    if (start >= end || !textNode.nodeValue.slice(start, end).trim()) {
-      continue
-    }
-    const middle = textNode.splitText(start)
-    middle.splitText(end - start)
+    if (!textNode.parentNode || !textNode.nodeValue?.trim()) continue
     const mark = document.createElement('mark')
     mark.className = `hl hl-${color}`
-    middle.parentNode.replaceChild(mark, middle)
-    mark.appendChild(middle)
+    textNode.parentNode.replaceChild(mark, textNode)
+    mark.appendChild(textNode)
   }
 }
 
-function applyHighlight(color) {
-  const selection = document.getSelection()
-  if (!selection.rangeCount || selection.isCollapsed) {
-    return
-  }
-  const range = selection.getRangeAt(0)
-  const marks = intersectingHighlights(range)
-  const allSameColor = marks.length > 0 && marks.every((mark) => mark.classList.contains(`hl-${color}`))
+function transformHighlightSelection(range, color, remove = false) {
+  if (!range || range.collapsed || !reader.contains(range.commonAncestorContainer)) return false
+  const workingRange = range.cloneRange()
+  const fragment = workingRange.extractContents()
+  unwrapMarks(fragment, 'mark[data-pliego-search]')
+  const existing = fragment.querySelectorAll ? Array.from(fragment.querySelectorAll('mark.hl')) : []
+  const textNodes = textNodesIn(fragment)
+  const totalText = textNodes.reduce((total, node) => total + meaningfulTextLength(node.nodeValue), 0)
+  const highlightedText = textNodes
+    .filter((node) => node.parentElement?.closest('mark.hl'))
+    .reduce((total, node) => total + meaningfulTextLength(node.nodeValue), 0)
+  const allSameColor = existing.length > 0
+    && existing.every((mark) => mark.classList.contains(`hl-${color}`))
+    && highlightedText >= totalText
 
-  for (const mark of marks) {
-    unwrapMark(mark)
-  }
-
-  if (allSameColor) {
-    return
-  }
-
-  wrapRangeTextNodes(range, color)
+  unwrapMarks(fragment, 'mark.hl')
+  if (!remove && !allSameColor) wrapTextNodesInRoot(fragment, color)
+  workingRange.insertNode(fragment)
+  return true
 }
 
-function removeHighlight() {
-  const selection = document.getSelection()
-  if (!selection.rangeCount) {
-    return
-  }
-  const range = selection.getRangeAt(0)
-  for (const mark of intersectingHighlights(range)) {
-    unwrapMark(mark)
-  }
+function applyHighlight(color, range = highlightSelectionRange) {
+  return transformHighlightSelection(range, color)
+}
+
+function removeHighlight(range = highlightSelectionRange) {
+  return transformHighlightSelection(range, '', true)
 }
 
 async function persistHighlights() {
@@ -2209,14 +2318,25 @@ async function persistHighlights() {
   }
 }
 
-formatMenu.addEventListener('mousedown', (event) => {
+formatMenu.addEventListener('pointerdown', (event) => {
+  event.preventDefault()
+})
+
+formatMenu.addEventListener('click', (event) => {
   event.preventDefault()
   const button = event.target.closest('button[data-action]')
   if (!button) {
     return
   }
+  const range = formatSelectionRange?.cloneRange()
+  if (!range) return
+  const selection = document.getSelection()
+  selection.removeAllRanges()
+  selection.addRange(range)
   FORMAT_ACTIONS[Number(button.dataset.action)].run()
   state.dirty = true
+  formatSelectionRange = null
+  hideFormatMenu()
 })
 
 // ---------- Drag & drop ----------
@@ -2413,16 +2533,7 @@ function runSearch(term) {
 }
 
 function clearHighlights() {
-  const marks = reader.querySelectorAll('mark[data-pliego-search]')
-  for (let index = 0; index < marks.length; index += 1) {
-    const mark = marks[index]
-    const parent = mark.parentNode
-    if (!parent) {
-      continue
-    }
-    parent.replaceChild(document.createTextNode(mark.textContent || ''), mark)
-    parent.normalize()
-  }
+  unwrapMarks(reader, 'mark[data-pliego-search]')
 }
 
 function highlightMatches(root, term) {
@@ -2505,7 +2616,7 @@ const PALETTE_COMMANDS = [
   { labelKey: 'folderSearch', hintKey: 'folderNavigationShortcut', run: () => openPalette('search') },
   { labelKey: 'sidebarToggle', hintKey: 'navigation', run: () => toggleSidebar() },
   { labelKey: 'openCodex', hintKey: 'localAssistant', run: () => void openCodexPanel() },
-  { labelKey: 'changeTheme', hintKey: 'themeModes', run: () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
+  { labelKey: 'changeTheme', hintKey: 'themeModes', run: () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
 ]
 
 function paletteLabel(item) {
@@ -2596,7 +2707,11 @@ function searchSnippet(text, query) {
   return at < 0 ? clean.slice(0, 140) : `${at > 45 ? '…' : ''}${clean.slice(Math.max(0, at - 45), at + query.length + 90)}${at + query.length + 90 < clean.length ? '…' : ''}`
 }
 
-function relativePath(path) { return state.folder && path.startsWith(state.folder) ? path.slice(state.folder.length + 1) : path }
+function relativePath(path) {
+  if (!state.folder || !isPathWithinFolder(path, state.folder)) return path
+  const root = normalizedPath(state.folder)
+  return normalizedPath(path).slice(root.length + (root === '/' ? 0 : 1))
+}
 
 function resolveIndexedReference(sourcePath, reference) {
   const target = reference.replace(/\\/g, '/').replace(/\.md$/i, '').toLowerCase()
@@ -2633,9 +2748,20 @@ referencesBox.addEventListener('click', (event) => {
 if (!onboardingCompleted()) window.setTimeout(() => onboarding.start(), 450)
 
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !commandPalette.classList.contains('hidden')) closePalette()
-  if (event.key === 'Escape' && !inboxView.classList.contains('hidden')) inboxView.classList.add('hidden')
-  if (event.key === 'Escape' && !newNoteModal.classList.contains('hidden')) closeNewNoteDialog()
+  if (event.key === 'Escape') {
+    hideFileContextMenu()
+    if (!commandPalette.classList.contains('hidden')) closePalette()
+    if (!inboxView.classList.contains('hidden')) inboxView.classList.add('hidden')
+    if (!newNoteModal.classList.contains('hidden')) closeNewNoteDialog()
+    if (!settingsModal.classList.contains('hidden')) settingsModal.classList.add('hidden')
+    if (!libraryEditor.classList.contains('hidden')) libraryEditor.classList.add('hidden')
+    if (!tocOverlay.classList.contains('hidden')) tocOverlay.classList.add('hidden')
+    if (!codexPanel.classList.contains('hidden')) codexPanel.classList.add('hidden')
+    return
+  }
+  const target = event.target
+  const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLElement && target.isContentEditable
+  if (isTyping) return
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') { event.preventDefault(); openNewNoteDialog() }
   if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === 'Space') { event.preventDefault(); openQuickCapture() }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') { event.preventDefault(); openPalette('files') }

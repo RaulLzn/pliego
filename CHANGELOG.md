@@ -2,6 +2,16 @@
 
 Todos los cambios relevantes de Pliego se documentan en este archivo. El proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [1.4.2] - 2026-08-23
+
+### Correcciones
+
+- Las bibliotecas cargan el árbol visible y mantienen la pantalla de Library si la carpeta no se puede leer.
+- Se invalidan cargas obsoletas al cambiar de biblioteca y se protegen documentos con cambios sin guardar.
+- El menú de resaltado conserva la selección, se reposiciona al hacer scroll y permite modificar solo el fragmento seleccionado.
+- Se propagan los errores de lectura/indexación de carpetas y se valida el resultado de abrir el explorador de archivos.
+- Se corrige la persistencia del tema desde la paleta de comandos y el cierre de overlays con Escape.
+
 ## [1.4.1] - 2026-08-23
 
 ### Correcciones
@@ -118,3 +128,4 @@ Primera versión pública de Pliego, una biblioteca documental visual y local pa
 [1.3.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.3.0
 [1.4.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.4.0
 [1.4.1]: https://github.com/RaulLzn/pliego/releases/tag/v1.4.1
+[1.4.2]: https://github.com/RaulLzn/pliego/releases/tag/v1.4.2

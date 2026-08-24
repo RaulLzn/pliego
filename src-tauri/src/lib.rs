@@ -115,13 +115,17 @@ fn is_document(path: &Path) -> bool {
     document_kind(path).is_some()
 }
 
-fn build_tree(dir: &Path) -> Vec<TreeNode> {
+fn build_tree(dir: &Path) -> Result<Vec<TreeNode>, String> {
     let mut nodes = Vec::new();
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return nodes;
-    };
+    let entries = std::fs::read_dir(dir)
+        .map_err(|error| format!("No se puede leer la carpeta '{}': {error}", dir.display()))?;
 
-    let mut items: Vec<_> = entries.flatten().collect();
+    let mut items: Vec<_> = entries.collect::<Result<Vec<_>, _>>().map_err(|error| {
+        format!(
+            "No se puede enumerar la carpeta '{}': {error}",
+            dir.display()
+        )
+    })?;
     items.sort_by_key(|entry| {
         (
             !entry.path().is_dir(),
@@ -137,7 +141,7 @@ fn build_tree(dir: &Path) -> Vec<TreeNode> {
         }
 
         if path.is_dir() {
-            let children = build_tree(&path);
+            let children = build_tree(&path)?;
             if !children.is_empty() {
                 nodes.push(TreeNode {
                     name,
@@ -156,11 +160,11 @@ fn build_tree(dir: &Path) -> Vec<TreeNode> {
         }
     }
 
-    nodes
+    Ok(nodes)
 }
 
 #[tauri::command]
-fn list_markdown_tree(dir: String) -> Vec<TreeNode> {
+fn list_markdown_tree(dir: String) -> Result<Vec<TreeNode>, String> {
     build_tree(Path::new(&dir))
 }
 
@@ -204,24 +208,34 @@ fn markdown_references(contents: &str) -> Vec<String> {
     refs
 }
 
-fn collect_document_index(dir: &Path, entries: &mut Vec<DocumentIndexEntry>) {
-    let Ok(children) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for child in children.flatten() {
+fn collect_document_index(dir: &Path, entries: &mut Vec<DocumentIndexEntry>) -> Result<(), String> {
+    let children = std::fs::read_dir(dir).map_err(|error| {
+        format!(
+            "No se puede indexar la carpeta '{}': {error}",
+            dir.display()
+        )
+    })?;
+    for child in children {
+        let child = child.map_err(|error| {
+            format!(
+                "No se puede enumerar la carpeta '{}': {error}",
+                dir.display()
+            )
+        })?;
         let path = child.path();
         if child.file_name().to_string_lossy().starts_with('.') {
             continue;
         }
         if path.is_dir() {
-            collect_document_index(&path, entries);
+            collect_document_index(&path, entries)?;
             continue;
         }
         let Some(kind) = document_kind(&path) else {
             continue;
         };
         let contents = if matches!(kind, "markdown" | "text" | "table" | "mermaid") {
-            read_text_prefix(&path, INDEX_TEXT_BYTES).unwrap_or_default()
+            read_text_prefix(&path, INDEX_TEXT_BYTES)
+                .map_err(|error| format!("No se pudo indexar '{}': {error}", path.display()))?
         } else {
             String::new()
         };
@@ -238,6 +252,7 @@ fn collect_document_index(dir: &Path, entries: &mut Vec<DocumentIndexEntry>) {
             references,
         });
     }
+    Ok(())
 }
 
 fn read_text_prefix(path: &Path, limit: u64) -> Result<String, String> {
@@ -250,15 +265,15 @@ fn read_text_prefix(path: &Path, limit: u64) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn list_document_index(dir: String) -> Vec<DocumentIndexEntry> {
+fn list_document_index(dir: String) -> Result<Vec<DocumentIndexEntry>, String> {
     let mut entries = Vec::new();
-    collect_document_index(Path::new(&dir), &mut entries);
+    collect_document_index(Path::new(&dir), &mut entries)?;
     entries.sort_by(|a, b| {
         a.path
             .to_ascii_lowercase()
             .cmp(&b.path.to_ascii_lowercase())
     });
-    entries
+    Ok(entries)
 }
 
 #[tauri::command]
@@ -328,10 +343,19 @@ fn open_file_in_folder(path: String) -> Result<(), String> {
     #[cfg(all(unix, not(target_os = "macos")))]
     command.arg(&folder);
 
-    command
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("No se pudo abrir el explorador de archivos: {error}"))
+    let status = command
+        .status()
+        .map_err(|error| format!("No se pudo abrir el explorador de archivos: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "El explorador de archivos terminó con código {}",
+            status
+                .code()
+                .map_or_else(|| "desconocido".to_string(), |code| code.to_string())
+        ))
+    }
 }
 
 #[tauri::command]
@@ -691,7 +715,7 @@ mod tests {
         std::fs::write(root.join("ignored.zip"), b"ignored").unwrap();
 
         let mut entries = Vec::new();
-        collect_document_index(&root, &mut entries);
+        collect_document_index(&root, &mut entries).unwrap();
 
         assert_eq!(entries.len(), 3);
         let markdown = entries
@@ -702,6 +726,14 @@ mod tests {
         assert!(entries.iter().any(|entry| entry.kind == "table"));
         assert!(entries.iter().any(|entry| entry.kind == "epub"));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reports_missing_library_errors_instead_of_returning_empty_results() {
+        let missing = std::env::temp_dir().join(format!("pliego-missing-{}", std::process::id()));
+        assert!(!missing.exists());
+        assert!(list_markdown_tree(missing.to_string_lossy().into_owned()).is_err());
+        assert!(list_document_index(missing.to_string_lossy().into_owned()).is_err());
     }
 
     #[test]
