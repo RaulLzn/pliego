@@ -2,6 +2,12 @@
 
 Todos los cambios relevantes de Pliego se documentan en este archivo. El proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Correcciones
+
+- La interfaz vuelve a responder en la primera apertura (sin archivos recientes): el render inicial de Recientes ya no consulta las traducciones antes de inicializarlas, lo que abortaba el arranque y dejaba todos los botones sin efecto.
+
 ## [1.4.2] - 2026-08-23
 
 ### Correcciones

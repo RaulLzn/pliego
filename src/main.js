@@ -434,8 +434,7 @@ applyReaderFont(localStorage.getItem(FONT_KEY) || 'serif')
 if (localStorage.getItem(SIDEBAR_KEY) === 'hidden') {
   toggleSidebar(false)
 }
-renderRecents()
-renderDocumentTabs()
+// Recientes y pestañas se renderizan en applyLanguage(), una vez inicializado TRANSLATIONS.
 
 const appWindow = getCurrentWindow()
 $('#windowMinimize').addEventListener('click', () => void appWindow.minimize().catch(() => {}))
