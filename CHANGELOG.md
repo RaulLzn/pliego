@@ -4,9 +4,15 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 
 ## Unreleased
 
+## [1.4.3] - 2026-09-23
+
 ### Correcciones
 
 - La interfaz vuelve a responder en la primera apertura (sin archivos recientes): el render inicial de Recientes ya no consulta las traducciones antes de inicializarlas, lo que abortaba el arranque y dejaba todos los botones sin efecto.
+
+### Seguridad
+
+- Se actualiza `@xmldom/xmldom` a 0.8.15 para resolver los avisos de severidad alta detectados en la versión 0.8.13.
 
 ## [1.4.2] - 2026-08-23
 
@@ -135,3 +141,4 @@ Primera versión pública de Pliego, una biblioteca documental visual y local pa
 [1.4.0]: https://github.com/RaulLzn/pliego/releases/tag/v1.4.0
 [1.4.1]: https://github.com/RaulLzn/pliego/releases/tag/v1.4.1
 [1.4.2]: https://github.com/RaulLzn/pliego/releases/tag/v1.4.2
+[1.4.3]: https://github.com/RaulLzn/pliego/releases/tag/v1.4.3
