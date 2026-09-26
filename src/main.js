@@ -1,4 +1,12 @@
 import './style.css'
+import '@fontsource/lato/400.css'
+import '@fontsource/lato/400-italic.css'
+import '@fontsource/lato/700.css'
+import '@fontsource/lato/700-italic.css'
+import '@fontsource/raleway/400.css'
+import '@fontsource/raleway/400-italic.css'
+import '@fontsource/raleway/700.css'
+import '@fontsource/raleway/700-italic.css'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
@@ -268,12 +276,14 @@ document.querySelector('#app').innerHTML = `
           </div>
         </div>
 
-        <div class="setting-row">
+        <div class="setting-row reader-font-row">
           <span data-i18n="readerFont">Fuente de lectura</span>
-          <div class="btn-group mode-group">
+          <div class="btn-group mode-group reader-font-options">
             <button class="mode-button" data-set-font="serif" type="button">Serif</button>
             <button class="mode-button" data-set-font="sans" type="button">Sans</button>
             <button class="mode-button" data-set-font="mono" type="button">Mono</button>
+            <button class="mode-button" data-set-font="lato" type="button">Lato</button>
+            <button class="mode-button" data-set-font="raleway" type="button">Raleway</button>
           </div>
         </div>
 

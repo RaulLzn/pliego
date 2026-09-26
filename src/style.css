@@ -1504,6 +1504,21 @@ a {
   color: var(--text-secondary);
 }
 
+.reader-font-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.reader-font-options {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.reader-font-options .mode-button {
+  padding-inline: 6px;
+}
+
 .scale-label {
   font-family: var(--mono-font);
   font-size: 0.8rem;
@@ -1521,6 +1536,14 @@ a {
 
 :root[data-reader-font='mono'] {
   --reader-font: 'JetBrains Mono', 'Cascadia Code', monospace;
+}
+
+:root[data-reader-font='lato'] {
+  --reader-font: 'Lato', 'Segoe UI', system-ui, sans-serif;
+}
+
+:root[data-reader-font='raleway'] {
+  --reader-font: 'Raleway', 'Segoe UI', system-ui, sans-serif;
 }
 
 /* Fix glitch de repintado en elementos sticky (WebKitGTK) */
