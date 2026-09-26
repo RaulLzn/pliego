@@ -4,6 +4,12 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 
 ## Unreleased
 
+## Unreleased
+
+### Apariencia
+
+- Nuevas fuentes de lectura Lato y Raleway, incluidas en la aplicación (sin depender de fuentes instaladas en el sistema ni de servicios externos). El selector de fuente ocupa ahora su propia fila en Configuración.
+
 ## [1.4.3] - 2026-09-23
 
 ### Correcciones
