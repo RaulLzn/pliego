@@ -4,7 +4,7 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 
 ## Unreleased
 
-## Unreleased
+## [1.5.0] - 2026-09-28
 
 ### Apariencia
 
