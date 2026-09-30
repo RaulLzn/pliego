@@ -42,12 +42,12 @@ async function renderPdf(reader, bytes, isCurrent) {
     resizeObserver?.disconnect()
     clearTimeout(resizeTimer)
     for (const item of pages) {
-      item.task?.cancel()
-      item.page?.cleanup()
+      try { item.task?.cancel() } catch (_) {}
+      try { item.page?.cleanup() } catch (_) {}
       item.canvas.width = 0
       item.canvas.height = 0
     }
-    void (pdf ? pdf.destroy() : loadingTask.destroy()).catch(() => {})
+    try { void Promise.resolve(loadingTask.destroy()).catch(() => {}) } catch (_) {}
   }
   reader._visualCleanup = cleanup
   pdf = await loadingTask.promise
