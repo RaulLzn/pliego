@@ -7,6 +7,10 @@
   visibility: hidden;
 }
 
+.shell.focus-mode .window-titlebar {
+  margin-inline: 0;
+}
+
 .shell.focus-mode .topbar,
 .shell.focus-mode .document-tabs,
 .shell.focus-mode .update-banner,
