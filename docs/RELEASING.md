@@ -20,7 +20,15 @@ git tag -a v1.2.3 -m "Pliego 1.2.3"
 git push origin v1.2.3
 ```
 
-El workflow `release.yml` valida que el tag coincida con la versión y crea una release con instaladores de cada plataforma. La release queda como borrador para revisar artefactos antes de publicarla.
+El workflow `release.yml` valida que el tag coincida con la versión y crea una release con instaladores de cada plataforma. La release se construye como borrador y se publica automáticamente cuando todos los builds, la verificación macOS y la validación del manifiesto del updater terminan correctamente. Si falla alguno, permanece como borrador.
+
+## Actualizaciones integradas
+
+Pliego comprueba al iniciarse si hay una nueva versión publicada y ofrece instalarla en AppImage, Windows (NSIS/MSI) y macOS. La primera versión con updater se instala manualmente; las versiones anteriores no pueden recibir esta función retroactivamente. Las instalaciones RPM y DEB siguen actualizándose por su gestor de paquetes y no deben recibir el AppImage del updater.
+
+El updater de Tauri verifica la firma de cada paquete. La clave pública está en `src-tauri/tauri.conf.json`; la privada debe conservarse en un almacén seguro y en el secreto de GitHub Actions `TAURI_SIGNING_PRIVATE_KEY`. Esta clave no tiene contraseña, por lo que el workflow fija `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` como cadena vacía para evitar una solicitud interactiva. No incluir la clave privada en Git ni imprimirla en logs. Conservar una copia segura de la clave: perder la clave impediría actualizar a quienes instalaron una versión que confía en ella.
+
+El job de publicación comprueba que el borrador incluye `latest.json`, firmas `.sig` y paquetes de actualización para AppImage, Windows y ambas arquitecturas macOS. El `latest.json` debe apuntar a los archivos del mismo tag y contener entradas válidas para cada plataforma. Probar la actualización real desde una instalación de la versión anterior en cada sistema; una compilación correcta no demuestra que la instalación y el reinicio funcionen.
 
 ## Firma de código
 
@@ -37,7 +45,7 @@ codesign --verify --deep --strict --verbose=2 Pliego.app
 codesign --display --verbose=4 Pliego.app
 ```
 
-La release permanece como borrador hasta que los jobs de ambas arquitecturas macOS validen la firma ad hoc. Después de publicarla, también debe instalarse y abrirse el DMG descargado en un Mac real: la cuarentena aplicada por el navegador es la que activa la evaluación completa de Gatekeeper y no puede reproducirse en los runners de CI.
+La release permanece como borrador hasta que los jobs de ambas arquitecturas macOS validen la firma ad hoc y el manifiesto esté completo. Después de publicarla, también debe instalarse y abrirse el DMG descargado en un Mac real: la cuarentena aplicada por el navegador es la que activa la evaluación completa de Gatekeeper y no puede reproducirse en los runners de CI.
 
 ### Windows
 

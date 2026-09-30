@@ -4,6 +4,15 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 
 ## Unreleased
 
+## [1.6.0] - 2026-09-30
+
+### Actualizaciones
+
+- Comprobación automática al abrir Pliego y botón para buscar actualizaciones en Configuración.
+- Descarga, verificación de firma e instalación desde la aplicación para AppImage, Windows y macOS, con protección de cambios sin guardar.
+- Publicación automática tras compilar todas las plataformas y validar el manifiesto del updater.
+- RPM y DEB conservan su actualización mediante el gestor de paquetes; su integración dentro de Pliego queda pendiente.
+
 ## [1.5.0] - 2026-09-28
 
 ### Apariencia

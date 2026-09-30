@@ -16,6 +16,7 @@ import TurndownService from 'turndown'
 import { gfm } from 'turndown-plugin-gfm'
 import { decodeBase64, renderMermaidBlocks, renderMermaidDocument, renderTableDocument, renderVisualDocument } from './document-renderers.js'
 import { createOnboarding, onboardingCompleted } from './onboarding.js'
+import { initializeUpdater } from './updates.js'
 
 const THEME_KEY = 'pliego-theme'
 const RECENTS_KEY = 'pliego-recents'
@@ -143,6 +144,10 @@ document.querySelector('#app').innerHTML = `
     </header>
 
     <div id="documentTabs" class="document-tabs" data-i18n-aria="openTabs" aria-label="Archivos abiertos"></div>
+    <div id="updateBanner" class="update-banner hidden" role="status">
+      <span id="updateBannerText"></span>
+      <button id="updateInstall" class="ghost-button" type="button"></button>
+    </div>
 
     <input id="fileInput" type="file" accept=".md,.markdown,.mdown,.mkd,.txt,.csv,.tsv,.pdf,.docx,.epub,.png,.jpg,.jpeg,.gif,.webp,.svg,.bmp,.mmd,.mermaid" hidden />
 
@@ -305,6 +310,10 @@ document.querySelector('#app').innerHTML = `
         <div class="setting-row">
           <span data-i18n="gettingStarted">Primeros pasos</span>
           <button id="showOnboarding" class="ghost-button" data-i18n="showTutorial" type="button">Ver tutorial</button>
+        </div>
+        <div id="updateSetting" class="setting-row update-setting hidden">
+          <span id="updateStatus" role="status"></span>
+          <button id="updateCheck" class="ghost-button" type="button"></button>
         </div>
       </div>
     </div>
@@ -680,6 +689,7 @@ function applyLanguage(language) {
   if (formatMenu.children.length) renderFormatMenu()
   if (state.codexModels.length) renderCodexEfforts(codexEffort.value)
   onboarding.setLanguage?.(state.language)
+  updater?.render()
   renderLibraries()
   renderHomeFiles()
   if (state.folder) renderTree(state.treeNodes)
@@ -698,6 +708,8 @@ function applyLanguage(language) {
     renderPaletteResults(paletteInput.value)
   }
 }
+
+let updater = null
 
 function libraries() {
   try {
@@ -1002,6 +1014,7 @@ void refreshInbox()
 }))
 
 applyLanguage(state.language)
+updater = initializeUpdater({ language: () => state.language, hasUnsavedChanges: () => state.dirty })
 
 // ---------- Codex App Server ----------
 

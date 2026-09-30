@@ -8,10 +8,14 @@
   "permissions": [
     "core:default",
     "dialog:default",
-    "dialog:allow-open"
-    ,"core:window:allow-minimize"
-    ,"core:window:allow-toggle-maximize"
-    ,"core:window:allow-close"
-    ,"core:window:allow-start-dragging"
+    "dialog:allow-open",
+    "updater:allow-check",
+    "updater:allow-download",
+    "updater:allow-install",
+    "process:allow-restart",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging"
   ]
 }

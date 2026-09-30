@@ -1518,6 +1518,21 @@ a {
 .reader-font-options .mode-button {
   padding-inline: 6px;
 }
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--accent-dim);
+  color: var(--text-primary);
+  font-size: .82rem;
+}
+
+.update-setting { align-items: flex-start; }
+.update-setting span { min-width: 0; }
+.update-setting button { flex: 0 0 auto; }
 
 .scale-label {
   font-family: var(--mono-font);

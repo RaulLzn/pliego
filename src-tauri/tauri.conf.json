@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Pliego",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "identifier": "com.raul.pliego",
   "build": {
     "frontendDist": "../dist",
@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "publisher": "RaulLzn",
     "copyright": "Copyright © 2026 RaulLzn",
     "license": "MIT",
@@ -149,6 +150,12 @@
       "rpm": {
         "desktopTemplate": "linux/pliego.desktop.hbs"
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDNDg4OUE2ODQwNUE1MEMKUldRTXBRV0Vwb2xJYk4vYzhSRDBkMFJiR09WSSs1NDZsWENuOWhQWjU1RmI0aUN5dHhBZTRkQUkK",
+      "endpoints": ["https://github.com/RaulLzn/pliego/releases/latest/download/latest.json"]
     }
   }
 }

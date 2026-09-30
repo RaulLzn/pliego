@@ -75,6 +75,8 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           NO_STRIP: "1"
         with:
           tagName: v__VERSION__
@@ -90,6 +92,8 @@ jobs:
           generateReleaseNotes: true
           args: ${{ matrix.args }}
           releaseAssetNamePattern: "Pliego_[version]_[platform]_[arch].[ext]"
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
 
       - name: Verify macOS ad-hoc signature
         if: startsWith(matrix.platform, 'macos')
@@ -105,3 +109,23 @@ jobs:
           signature_details=$(codesign --display --verbose=4 "$app_path" 2>&1)
           grep -q 'Signature=adhoc' <<< "$signature_details"
           echo "Verified macOS ad-hoc signature: $app_path"
+
+  publish:
+    needs: [validate-version, build]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Validate updater artifacts and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.validate-version.outputs.version }}
+        shell: bash
+        run: |
+          mkdir -p release-check
+          gh release view "v${VERSION}" --repo "$GITHUB_REPOSITORY" --json assets > release-check/release.json
+          gh release download "v${VERSION}" --repo "$GITHUB_REPOSITORY" --pattern latest.json --pattern '*.sig' --dir release-check
+          node scripts/validate-updater.mjs release-check "$VERSION" "$GITHUB_REPOSITORY"
+          gh release edit "v${VERSION}" --repo "$GITHUB_REPOSITORY" --draft=false --latest
