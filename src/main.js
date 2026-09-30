@@ -20,6 +20,7 @@ import { createReadingSession, filterKnownMissingTabs, selectStartupPlan } from 
 import { initializeUpdater } from './updates.js'
 import { createFocusMode } from './focus-mode.js'
 import { createReadingLayout } from './reading-layout.js'
+import { AnnotationsPanel, annotationDocumentKey } from './annotations.js'
 
 const THEME_KEY = 'pliego-theme'
 const RECENTS_KEY = 'pliego-recents'
@@ -55,6 +56,7 @@ const ICONS = {
   library: '<svg viewBox="0 0 24 24"><path d="M4 4h5v16H4zM10 4h5v16h-5zM16 6l4-1 2 14-4 1z"/></svg>',
   star: '<svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/></svg>',
   edit: '<svg viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10zM13.5 6.5 17 10"/></svg>',
+  annotations: '<svg viewBox="0 0 24 24"><path d="M4 4h16v13H8l-4 3zM8 8h8M8 12h5"/></svg>',
   inbox: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 14h5l2 3h2l2-3h5"/></svg>',
 }
 const icon = (name) => `<span class="animated-icon" aria-hidden="true">${ICONS[name]}</span>`
@@ -151,6 +153,7 @@ document.querySelector('#app').innerHTML = `
         <div class="tool-cluster">
           <button id="codexToggle" class="tool-button ai-button" type="button" data-i18n-aria="codex" data-i18n-tooltip="assistant" aria-label="Codex AI" data-tooltip="Asistente Codex">${icon('ai')}</button>
           <button id="favoriteToggle" class="tool-button" type="button" data-i18n-aria="favoriteAdd" aria-label="Añadir a favoritos" data-tooltip="Añadir a favoritos">${icon('star')}</button>
+          <button id="annotationsToggle" class="tool-button" type="button" data-i18n-aria="annotationsTitle" data-i18n-tooltip="annotationsHint" aria-label="Resaltados y notas" data-tooltip="Resaltados y notas" aria-controls="annotationsPanel" aria-expanded="false">${icon('annotations')}</button>
           <button id="tocToggle" class="tool-button" type="button" data-i18n-aria="index" data-i18n-tooltip="index" aria-label="Indice" data-tooltip="Índice">${icon('toc')}</button>
           <button id="settingsButton" class="tool-button" type="button" data-i18n-aria="settings" data-i18n-tooltip="settings" aria-label="Configuraciones" data-tooltip="Configuración">${icon('settings')}</button>
         </div>
@@ -231,6 +234,16 @@ document.querySelector('#app').innerHTML = `
       <nav id="toc" class="toc">
         <p class="muted" data-i18n="tocEmpty">El indice aparecera aqui.</p>
       </nav>
+    </aside>
+
+    <aside id="annotationsPanel" class="annotations-panel hidden" role="complementary" aria-labelledby="annotationsTitle">
+      <header class="annotations-head">
+        <div><p class="panel-label" data-i18n="annotationsEyebrow">LECTURA</p><h2 id="annotationsTitle"></h2></div>
+        <span id="annotationsCount" class="muted"></span>
+        <button id="annotationsClose" class="icon-button small" type="button" data-i18n-aria="annotationsClose" aria-label="Cerrar notas">✕</button>
+      </header>
+      <p id="annotationsStatus" class="annotations-status hidden" role="status" aria-live="polite"></p>
+      <div id="annotationsList" class="annotations-list"></div>
     </aside>
 
     <aside id="codexPanel" class="codex-panel hidden" data-i18n-aria="codexChat" aria-label="Chat con Codex">
@@ -458,6 +471,17 @@ const codexSend = $('#codexSend')
 const codexCancel = $('#codexCancel')
 const codexOptions = $('#codexOptions')
 const codexOptionsSummary = $('#codexOptionsSummary')
+const annotationsPanel = $('#annotationsPanel')
+const annotationsToggle = $('#annotationsToggle')
+const annotationsPanelController = new AnnotationsPanel({
+  panel: annotationsPanel,
+  list: $('#annotationsList'),
+  status: $('#annotationsStatus'),
+  title: $('#annotationsTitle'),
+  count: $('#annotationsCount'),
+  reader,
+  language: () => state.language,
+})
 const commandPalette = $('#commandPalette')
 const paletteInput = $('#paletteInput')
 const paletteResults = $('#paletteResults')
@@ -555,8 +579,32 @@ $('#languageSelect').addEventListener('click', (event) => {
   applyLanguage(option.dataset.language)
   $('#languageSelect').removeAttribute('open')
 })
-$('#tocToggle').addEventListener('click', () => tocOverlay.classList.toggle('hidden'))
+$('#tocToggle').addEventListener('click', () => {
+  const opening = tocOverlay.classList.contains('hidden')
+  if (opening) closeAnnotationsPanel()
+  tocOverlay.classList.toggle('hidden')
+})
 $('#tocClose').addEventListener('click', () => tocOverlay.classList.add('hidden'))
+annotationsToggle.addEventListener('click', toggleAnnotationsPanel)
+$('#annotationsClose').addEventListener('click', closeAnnotationsPanel)
+
+function toggleAnnotationsPanel() {
+  if (!annotationsPanel.classList.contains('hidden')) {
+    closeAnnotationsPanel()
+    return
+  }
+  tocOverlay.classList.add('hidden')
+  codexPanel.classList.add('hidden')
+  annotationsPanel.classList.remove('hidden')
+  annotationsToggle.setAttribute('aria-expanded', 'true')
+  annotationsPanelController.refresh()
+}
+
+function closeAnnotationsPanel() {
+  annotationsPanel.classList.add('hidden')
+  annotationsToggle.setAttribute('aria-expanded', 'false')
+}
+
 $('#settingsButton').addEventListener('click', () => settingsModal.classList.remove('hidden'))
 $('#settingsClose').addEventListener('click', () => settingsModal.classList.add('hidden'))
 $('#showOnboarding').addEventListener('click', () => onboarding.start())
@@ -694,7 +742,7 @@ function stepScale(delta) {
 const TRANSLATIONS = {
   es: {
     minimize: 'Minimizar', maximize: 'Maximizar', close: 'Cerrar', workspace: 'ESPACIO DE TRABAJO', libraries: 'Tus bibliotecas', librariesLead: 'Organiza carpetas de documentos y entra con un clic.', brandEyebrow: 'Biblioteca documental', language: 'Idioma', addLibrary: 'Añadir biblioteca', addLibraryHint: 'Selecciona una carpeta de tu equipo', emptyLibraries: 'Aún no hay bibliotecas. Añade tu primera carpeta.',
-    sidebarToggle: 'Mostrar u ocultar panel', sidebarTooltip: 'Panel lateral', openFile: 'Abrir archivo', openFolder: 'Abrir carpeta', newNote: 'Nueva página Markdown', newNoteTooltip: 'Nueva página · Ctrl+N', folderSearch: 'Buscar en carpeta · Ctrl+Shift+F', quickOpen: 'Apertura rápida', quickOpenTooltip: 'Apertura rápida · Ctrl+P', quickCapture: 'Captura rápida', quickCaptureTooltip: 'Captura rápida · Ctrl+Alt+Space', searchLabel: 'Buscar',
+    sidebarToggle: 'Mostrar u ocultar panel', sidebarTooltip: 'Panel lateral', openFile: 'Abrir archivo', openFolder: 'Abrir carpeta', newNote: 'Nueva página Markdown', newNoteTooltip: 'Nueva página · Ctrl+N', folderSearch: 'Buscar en carpeta · Ctrl+Shift+F', quickOpen: 'Apertura rápida', quickOpenTooltip: 'Apertura rápida · Ctrl+P', quickCapture: 'Captura rápida', quickCaptureTooltip: 'Captura rápida · Ctrl+Alt+Space', searchLabel: 'Buscar', annotationsTitle: 'Resaltados y notas', annotationsHint: 'Resaltados y notas · Ctrl+Mayús+A', annotationsEyebrow: 'LECTURA', annotationsClose: 'Cerrar notas',
     assistant: 'Asistente Codex', codex: 'Codex AI', favoriteAdd: 'Añadir a favoritos', favoriteRemove: 'Quitar de favoritos', index: 'Índice', settings: 'Configuración', openTabs: 'Archivos abiertos', searchPlaceholder: 'Títulos, texto, código…', read: 'Lectura', edit: 'Edición', save: 'Guardar', fileLabel: 'Archivo', noFile: 'Ningún archivo abierto', openHint: 'Abre o arrastra un archivo para visualizarlo.', folderLabel: 'Carpeta', folderHint: 'Abre una biblioteca para explorar sus documentos.', recentsLabel: 'Recientes', noRecents: 'Aún no hay archivos recientes.', referencesLabel: 'Referencias', referencesHint: 'Abre un Markdown para ver sus enlaces.', clearReading: 'Lectura clara', readyTitle: 'Listo para abrir tus documentos', readyLead: 'Visor ligero con bibliotecas, edición visual y navegación wiki.', dropzone: 'Arrastra aquí tu archivo .md o usa el botón de arriba.', tocSections: '0 secciones', closeIndex: 'Cerrar índice', tocEmpty: 'El índice aparecerá aquí.',
     codexChat: 'Chat con Codex', closeCodex: 'Cerrar Codex', localAssistant: 'Asistente local', disconnected: 'Desconectado', codexNotice: 'Abre un Markdown para iniciar la conversación.', codexInputPlaceholder: 'Pregunta sobre el Markdown…', modelAndEffort: 'Modelo y esfuerzo', model: 'Modelo', loading: 'Cargando…', effort: 'Esfuerzo', default: 'Predeterminado', context: 'Contexto', documentContext: 'Markdown + referencias', folderContext: 'Toda la carpeta', permissions: 'Permisos', readOnly: 'Solo lectura', writeMarkdown: 'Editar Markdown', allowWeb: 'Permitir búsqueda web en este mensaje', cancel: 'Cancelar', send: 'Enviar',
     settingsTitle: 'Configuración', theme: 'Tema', light: 'Claro', dark: 'Oscuro', fontSize: 'Tamaño de letra', accentColor: 'Color de acento', gold: 'Dorado', teal: 'Verde azulado', coral: 'Coral', green: 'Verde', purple: 'Púrpura', readerFont: 'Fuente de lectura', readingLayout: 'Ajustes de lectura', readingWidth: 'Ancho de columna', readingWidthAuto: 'Automático', readingLineHeight: 'Interlineado', readingMargin: 'Márgenes', readingLayoutReset: 'Restablecer ajustes de lectura', readingMultiplier: '×', history: 'Historial', clearRecents: 'Limpiar recientes', globalCapture: 'Captura global', inboxShortcut: 'Atajo global del Inbox', saveShortcut: 'Guardar atajo', inboxFolder: 'Carpeta Inbox', notConfigured: 'Sin configurar', changeFolder: 'Cambiar carpeta', gettingStarted: 'Primeros pasos', showTutorial: 'Ver tutorial', highlightYellow: 'Resaltar amarillo', highlightGreen: 'Resaltar verde', highlightPink: 'Resaltar rosa', highlightBlue: 'Resaltar azul', removeHighlight: 'Quitar resaltado',
@@ -704,7 +752,7 @@ const TRANSLATIONS = {
   },
   en: {
     minimize: 'Minimize', maximize: 'Maximize', close: 'Close', workspace: 'WORKSPACE', libraries: 'Your libraries', librariesLead: 'Organize document folders and open them with one click.', brandEyebrow: 'Document library', language: 'Language', addLibrary: 'Add library', addLibraryHint: 'Choose a folder from your computer', emptyLibraries: 'No libraries yet. Add your first folder.',
-    sidebarToggle: 'Show or hide sidebar', sidebarTooltip: 'Sidebar', openFile: 'Open file', openFolder: 'Open folder', newNote: 'New Markdown page', newNoteTooltip: 'New page · Ctrl+N', folderSearch: 'Search folder · Ctrl+Shift+F', quickOpen: 'Quick open', quickOpenTooltip: 'Quick open · Ctrl+P', quickCapture: 'Quick capture', quickCaptureTooltip: 'Quick capture · Ctrl+Alt+Space', searchLabel: 'Search',
+    sidebarToggle: 'Show or hide sidebar', sidebarTooltip: 'Sidebar', openFile: 'Open file', openFolder: 'Open folder', newNote: 'New Markdown page', newNoteTooltip: 'New page · Ctrl+N', folderSearch: 'Search folder · Ctrl+Shift+F', quickOpen: 'Quick open', quickOpenTooltip: 'Quick open · Ctrl+P', quickCapture: 'Quick capture', quickCaptureTooltip: 'Quick capture · Ctrl+Alt+Space', searchLabel: 'Search', annotationsTitle: 'Highlights and notes', annotationsHint: 'Highlights and notes · Ctrl+Shift+A', annotationsEyebrow: 'READING', annotationsClose: 'Close notes',
     assistant: 'Codex assistant', codex: 'Codex AI', favoriteAdd: 'Add to favorites', favoriteRemove: 'Remove from favorites', index: 'Table of contents', settings: 'Settings', openTabs: 'Open files', searchPlaceholder: 'Titles, text, code…', read: 'Read', edit: 'Edit', save: 'Save', fileLabel: 'File', noFile: 'No file open', openHint: 'Open or drop a file to view it.', folderLabel: 'Folder', folderHint: 'Open a library to explore its documents.', recentsLabel: 'Recent', noRecents: 'No recent files yet.', referencesLabel: 'References', referencesHint: 'Open a Markdown file to see its links.', clearReading: 'Clear reading', readyTitle: 'Ready to open your documents', readyLead: 'A lightweight viewer with libraries, visual editing and wiki navigation.', dropzone: 'Drop your .md file here or use the button above.', tocSections: '0 sections', closeIndex: 'Close table of contents', tocEmpty: 'The table of contents will appear here.',
     codexChat: 'Codex chat', closeCodex: 'Close Codex', localAssistant: 'Local assistant', disconnected: 'Disconnected', codexNotice: 'Open a Markdown file to start the conversation.', codexInputPlaceholder: 'Ask about the Markdown…', modelAndEffort: 'Model and effort', model: 'Model', loading: 'Loading…', effort: 'Effort', default: 'Default', context: 'Context', documentContext: 'Markdown + references', folderContext: 'Entire folder', permissions: 'Permissions', readOnly: 'Read only', writeMarkdown: 'Edit Markdown', allowWeb: 'Allow web search in this message', cancel: 'Cancel', send: 'Send',
     settingsTitle: 'Settings', theme: 'Theme', light: 'Light', dark: 'Dark', fontSize: 'Font size', accentColor: 'Accent color', gold: 'Gold', teal: 'Teal', coral: 'Coral', green: 'Green', purple: 'Purple', readerFont: 'Reading font', readingLayout: 'Reading layout', readingWidth: 'Column width', readingWidthAuto: 'Automatic', readingLineHeight: 'Line spacing', readingMargin: 'Margins', readingLayoutReset: 'Reset reading settings', readingMultiplier: '×', history: 'History', clearRecents: 'Clear recent files', globalCapture: 'Global capture', inboxShortcut: 'Inbox global shortcut', saveShortcut: 'Save shortcut', inboxFolder: 'Inbox folder', notConfigured: 'Not configured', changeFolder: 'Change folder', gettingStarted: 'Getting started', showTutorial: 'View tutorial', highlightYellow: 'Highlight yellow', highlightGreen: 'Highlight green', highlightPink: 'Highlight pink', highlightBlue: 'Highlight blue', removeHighlight: 'Remove highlight',
@@ -746,7 +794,7 @@ function applyLanguage(language) {
     const value = labels[element.dataset.i18nTooltip]
     if (value) element.dataset.tooltip = value
   })
-  const tooltipMap = { openButton: labels.openFile, openFolderButton: labels.openFolder, folderSearchButton: labels.folderSearch, quickOpenButton: labels.quickOpen, codexToggle: labels.assistant, tocToggle: labels.index, settingsButton: labels.settings }
+  const tooltipMap = { openButton: labels.openFile, openFolderButton: labels.openFolder, folderSearchButton: labels.folderSearch, quickOpenButton: labels.quickOpen, codexToggle: labels.assistant, annotationsToggle: labels.annotationsHint, tocToggle: labels.index, settingsButton: labels.settings }
   Object.entries(tooltipMap).forEach(([id, value]) => { const button = $(`#${id}`); button.dataset.tooltip = value; button.setAttribute('aria-label', value.split(' · ')[0]) })
   searchInput.placeholder = labels.searchPlaceholder
   modeReadButton.textContent = labels.read
@@ -766,6 +814,7 @@ function applyLanguage(language) {
   renderHomeFiles()
   if (state.folder) renderTree(state.treeNodes)
   renderInbox()
+  annotationsPanelController.refresh()
   if (state.filePath) {
     if (state.visualInfo) metaInfo.textContent = visualDetail(state.visualInfo)
     else updateMeta()
@@ -1169,6 +1218,7 @@ codexCancel.addEventListener('click', async () => {
 void listen('codex-event', ({ payload }) => handleCodexEvent(payload)).catch(() => {})
 
 async function openCodexPanel() {
+  closeAnnotationsPanel()
   codexPanel.classList.remove('hidden')
   codexStatusLabel.textContent = uiText('Conectando…', 'Connecting…')
   try {
@@ -1914,6 +1964,7 @@ async function loadVisualFile(path, kind, entry, generation, { restorePosition =
   readingLayout.apply()
   state.documentLoading = false
   state.visualInfo = info
+  annotationsPanelController.setDocument({ key: annotationDocumentKey(path, payload.fileName), kind, name: payload.fileName })
   fileNameLabel.textContent = state.fileName
   metaInfo.textContent = visualDetail(info) || kind
   toc.innerHTML = `<p class="muted">${t('visualNoHeadings')}</p>`
@@ -2035,6 +2086,7 @@ function applyDocument(fileName, filePath, markdown, html) {
   reader.innerHTML = html
   readingLayout.apply()
   decorateRenderedContent()
+  annotationsPanelController.setDocument({ key: annotationDocumentKey(filePath, fileName), kind: state.documentKind, name: fileName })
   updateMeta()
   renderToc()
   runSearch(searchInput.value)
@@ -2124,6 +2176,7 @@ function clearCurrentDocument() {
   reader.className = 'reader empty'
   cleanupMarkdownImages()
   renderEmptyDocument()
+  annotationsPanelController.setDocument({ key: '', kind: '', name: '' })
   fileNameLabel.textContent = t('noFile')
   metaInfo.textContent = uiText('Selecciona un documento para visualizarlo.', 'Select a document to view it.')
   renderReferences()
@@ -2484,6 +2537,11 @@ function hideFormatMenu() {
 const highlightMenu = $('#highlightMenu')
 
 function maybeShowHighlightMenu() {
+  if (state.documentKind !== 'markdown') {
+    hideHighlightMenu()
+    highlightSelectionRange = null
+    return
+  }
   const selection = document.getSelection()
   if (selection.isCollapsed || !selection.rangeCount) {
     hideHighlightMenu()
@@ -2599,8 +2657,14 @@ function removeHighlight(range = highlightSelectionRange) {
 }
 
 async function persistHighlights() {
+  if (state.documentKind !== 'markdown') {
+    showMessage(uiText('Los resaltados persistentes solo están disponibles en Markdown.', 'Persistent highlights are only available in Markdown.'))
+    annotationsPanelController.refresh()
+    return
+  }
   if (!state.filePath) {
     showMessage(uiText('Resaltado aplicado solo en pantalla: este documento no tiene ruta en disco.', 'Highlight applied on screen only: this document has no disk path.'))
+    annotationsPanelController.refresh()
     return
   }
   try {
@@ -2610,6 +2674,7 @@ async function persistHighlights() {
   } catch (error) {
     showMessage(`${uiText('No pude guardar el resaltado: ', 'Could not save the highlight: ')}${formatError(error)}`)
   }
+  annotationsPanelController.refresh()
 }
 
 formatMenu.addEventListener('pointerdown', (event) => {
@@ -2825,6 +2890,7 @@ function runSearch(term) {
   const normalized = term.trim()
   if (!normalized) {
     searchStats.textContent = '0'
+    annotationsPanelController.refresh()
     return
   }
 
@@ -2833,6 +2899,7 @@ function runSearch(term) {
   if (state.matches.length > 0) {
     activateMatch(0)
   }
+  annotationsPanelController.refresh()
 }
 
 function clearHighlights() {
@@ -2919,6 +2986,7 @@ const PALETTE_COMMANDS = [
   { labelKey: 'openFolder', hintKey: 'changeLibrary', run: () => void openFolder() },
   { labelKey: 'folderSearch', hintKey: 'folderNavigationShortcut', run: () => openPalette('search') },
   { labelKey: 'sidebarToggle', hintKey: 'navigation', run: () => toggleSidebar() },
+  { labelKey: 'annotationsTitle', hintKey: 'annotationsHint', run: toggleAnnotationsPanel },
   { labelKey: 'openCodex', hintKey: 'localAssistant', run: () => void openCodexPanel() },
   { labelKey: 'changeTheme', hintKey: 'themeModes', run: () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
 ]
@@ -3073,6 +3141,7 @@ window.addEventListener('keydown', (event) => {
     if (!settingsModal.classList.contains('hidden')) settingsModal.classList.add('hidden')
     if (!libraryEditor.classList.contains('hidden')) libraryEditor.classList.add('hidden')
     if (!tocOverlay.classList.contains('hidden')) tocOverlay.classList.add('hidden')
+    if (!annotationsPanel.classList.contains('hidden')) closeAnnotationsPanel()
     if (!codexPanel.classList.contains('hidden')) codexPanel.classList.add('hidden')
     return
   }
@@ -3086,6 +3155,7 @@ window.addEventListener('keydown', (event) => {
   const target = event.target
   const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLElement && target.isContentEditable
   if (isTyping) return
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'a') { event.preventDefault(); toggleAnnotationsPanel() }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') { event.preventDefault(); openNewNoteDialog() }
   if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === 'Space') { event.preventDefault(); openQuickCapture() }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') { event.preventDefault(); openPalette('files') }

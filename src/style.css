@@ -967,6 +967,55 @@ a {
   z-index: 50;
 }
 
+.annotations-panel {
+  position: fixed;
+  z-index: 56;
+  top: 76px;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(430px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.42);
+}
+
+.annotations-head { display: flex; align-items: center; gap: 10px; }
+.annotations-head h2 { margin: 2px 0 0; font-size: 1.08rem; }
+.annotations-head > span { margin-left: auto; white-space: nowrap; font-size: .75rem; }
+.annotations-status { margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; color: var(--text-secondary); background: var(--bg2); font-size: .78rem; }
+.annotations-list { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; padding-right: 3px; overscroll-behavior: contain; }
+.annotations-empty { padding: 18px 8px; text-align: center; font-size: .86rem; }
+.annotation-group { display: flex; flex-direction: column; gap: 9px; padding: 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg2); }
+.annotation-quote { width: 100%; padding: 3px 7px; border: 0; border-left: 3px solid var(--accent); border-radius: 3px; background: transparent; color: var(--text-primary); text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.annotation-quote:hover { background: var(--accent-dim); }
+.annotation-yellow .annotation-quote { border-left-color: #eab308; }
+.annotation-green .annotation-quote { border-left-color: #22c55e; }
+.annotation-pink .annotation-quote { border-left-color: #ec4899; }
+.annotation-blue .annotation-quote { border-left-color: #3b82f6; }
+.annotation-note { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.annotation-new-label { margin: 0; color: var(--text-muted); font-size: .74rem; }
+.annotation-text { width: 100%; min-height: 62px; resize: vertical; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; outline: none; background: var(--bg1); color: var(--text-primary); font-size: .84rem; }
+.annotation-text:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+.annotation-actions { display: flex; justify-content: flex-end; gap: 7px; }
+.annotation-actions .ghost-button, .annotation-note > .primary-button { padding: 6px 10px; font-size: .76rem; }
+.annotation-delete:hover { color: var(--coral); border-color: var(--coral); }
+.annotation-orphans { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding: 10px; border: 1px solid var(--coral); border-radius: 9px; background: var(--coral-dim); }
+.annotation-orphans-title { margin: 0; font-size: .85rem; color: var(--coral); }
+.annotation-orphans-hint { margin: 0; color: var(--text-secondary); font-size: .73rem; }
+.annotation-note.is-orphan { padding: 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg2); }
+.annotation-orphan-label { color: var(--coral); font-size: .74rem; }
+.annotation-orphan-quote { margin: 0; padding-left: 8px; border-left: 2px solid var(--coral); color: var(--text-secondary); font-size: .78rem; overflow-wrap: anywhere; }
+.reader mark.annotation-target { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: 0 0 0 5px var(--accent-dim); }
+
+@media (max-width: 720px) {
+  .annotations-panel { top: 76px; right: 12px; bottom: 12px; width: calc(100vw - 24px); }
+}
+
 .toc-overlay-head {
   align-items: center;
   margin-bottom: 6px;
