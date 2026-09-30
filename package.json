@@ -16,6 +16,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test:reading-layout": "node --test tests/reading-layout.test.js",
     "preview": "vite preview",
     "check": "npm run build && cargo test --manifest-path src-tauri/Cargo.toml --locked",
     "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",

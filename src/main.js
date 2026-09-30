@@ -18,6 +18,7 @@ import { decodeBase64, renderMermaidBlocks, renderMermaidDocument, renderTableDo
 import { createOnboarding, onboardingCompleted } from './onboarding.js'
 import { initializeUpdater } from './updates.js'
 import { createFocusMode } from './focus-mode.js'
+import { createReadingLayout } from './reading-layout.js'
 
 const THEME_KEY = 'pliego-theme'
 const RECENTS_KEY = 'pliego-recents'
@@ -271,6 +272,30 @@ document.querySelector('#app').innerHTML = `
             <button id="fontPlus" class="icon-button" type="button">A+</button>
           </div>
         </div>
+
+        <section class="reading-layout-settings" aria-labelledby="readingLayoutTitle">
+          <h2 id="readingLayoutTitle" class="setting-section-title" data-i18n="readingLayout">Ajustes de lectura</h2>
+          <label class="reading-layout-control" for="readingWidth">
+            <span data-i18n="readingWidth">Ancho de columna</span>
+            <select id="readingWidth" aria-describedby="readingWidthValue">
+              <option value="0" data-i18n="readingWidthAuto">Automático</option>
+              <option value="720">720 px</option><option value="840">840 px</option><option value="960">960 px</option><option value="1080">1080 px</option>
+              <option value="1200">1200 px</option><option value="1320">1320 px</option><option value="1440">1440 px</option>
+            </select>
+            <output id="readingWidthValue" for="readingWidth">Automático</output>
+          </label>
+          <label class="reading-layout-control" for="readingLineHeight">
+            <span data-i18n="readingLineHeight">Interlineado</span>
+            <input id="readingLineHeight" type="range" min="140" max="220" step="5" value="180" aria-describedby="readingLineHeightValue" />
+            <output id="readingLineHeightValue" for="readingLineHeight">1.80×</output>
+          </label>
+          <label class="reading-layout-control" for="readingMargin">
+            <span data-i18n="readingMargin">Márgenes</span>
+            <input id="readingMargin" type="range" min="50" max="150" step="10" value="100" aria-describedby="readingMarginValue" />
+            <output id="readingMarginValue" for="readingMargin">100%</output>
+          </label>
+          <button id="readingLayoutReset" class="ghost-button" data-i18n="readingLayoutReset" type="button">Restablecer ajustes de lectura</button>
+        </section>
 
         <div class="setting-row">
           <span data-i18n="accentColor">Color de acento</span>
@@ -637,7 +662,7 @@ const TRANSLATIONS = {
     sidebarToggle: 'Mostrar u ocultar panel', sidebarTooltip: 'Panel lateral', openFile: 'Abrir archivo', openFolder: 'Abrir carpeta', newNote: 'Nueva página Markdown', newNoteTooltip: 'Nueva página · Ctrl+N', folderSearch: 'Buscar en carpeta · Ctrl+Shift+F', quickOpen: 'Apertura rápida', quickOpenTooltip: 'Apertura rápida · Ctrl+P', quickCapture: 'Captura rápida', quickCaptureTooltip: 'Captura rápida · Ctrl+Alt+Space', searchLabel: 'Buscar',
     assistant: 'Asistente Codex', codex: 'Codex AI', favoriteAdd: 'Añadir a favoritos', favoriteRemove: 'Quitar de favoritos', index: 'Índice', settings: 'Configuración', openTabs: 'Archivos abiertos', searchPlaceholder: 'Títulos, texto, código…', read: 'Lectura', edit: 'Edición', save: 'Guardar', fileLabel: 'Archivo', noFile: 'Ningún archivo abierto', openHint: 'Abre o arrastra un archivo para visualizarlo.', folderLabel: 'Carpeta', folderHint: 'Abre una biblioteca para explorar sus documentos.', recentsLabel: 'Recientes', noRecents: 'Aún no hay archivos recientes.', referencesLabel: 'Referencias', referencesHint: 'Abre un Markdown para ver sus enlaces.', clearReading: 'Lectura clara', readyTitle: 'Listo para abrir tus documentos', readyLead: 'Visor ligero con bibliotecas, edición visual y navegación wiki.', dropzone: 'Arrastra aquí tu archivo .md o usa el botón de arriba.', tocSections: '0 secciones', closeIndex: 'Cerrar índice', tocEmpty: 'El índice aparecerá aquí.',
     codexChat: 'Chat con Codex', closeCodex: 'Cerrar Codex', localAssistant: 'Asistente local', disconnected: 'Desconectado', codexNotice: 'Abre un Markdown para iniciar la conversación.', codexInputPlaceholder: 'Pregunta sobre el Markdown…', modelAndEffort: 'Modelo y esfuerzo', model: 'Modelo', loading: 'Cargando…', effort: 'Esfuerzo', default: 'Predeterminado', context: 'Contexto', documentContext: 'Markdown + referencias', folderContext: 'Toda la carpeta', permissions: 'Permisos', readOnly: 'Solo lectura', writeMarkdown: 'Editar Markdown', allowWeb: 'Permitir búsqueda web en este mensaje', cancel: 'Cancelar', send: 'Enviar',
-    settingsTitle: 'Configuración', theme: 'Tema', light: 'Claro', dark: 'Oscuro', fontSize: 'Tamaño de letra', accentColor: 'Color de acento', gold: 'Dorado', teal: 'Verde azulado', coral: 'Coral', green: 'Verde', purple: 'Púrpura', readerFont: 'Fuente de lectura', history: 'Historial', clearRecents: 'Limpiar recientes', globalCapture: 'Captura global', inboxShortcut: 'Atajo global del Inbox', saveShortcut: 'Guardar atajo', inboxFolder: 'Carpeta Inbox', notConfigured: 'Sin configurar', changeFolder: 'Cambiar carpeta', gettingStarted: 'Primeros pasos', showTutorial: 'Ver tutorial', highlightYellow: 'Resaltar amarillo', highlightGreen: 'Resaltar verde', highlightPink: 'Resaltar rosa', highlightBlue: 'Resaltar azul', removeHighlight: 'Quitar resaltado',
+    settingsTitle: 'Configuración', theme: 'Tema', light: 'Claro', dark: 'Oscuro', fontSize: 'Tamaño de letra', accentColor: 'Color de acento', gold: 'Dorado', teal: 'Verde azulado', coral: 'Coral', green: 'Verde', purple: 'Púrpura', readerFont: 'Fuente de lectura', readingLayout: 'Ajustes de lectura', readingWidth: 'Ancho de columna', readingWidthAuto: 'Automático', readingLineHeight: 'Interlineado', readingMargin: 'Márgenes', readingLayoutReset: 'Restablecer ajustes de lectura', readingMultiplier: '×', history: 'Historial', clearRecents: 'Limpiar recientes', globalCapture: 'Captura global', inboxShortcut: 'Atajo global del Inbox', saveShortcut: 'Guardar atajo', inboxFolder: 'Carpeta Inbox', notConfigured: 'Sin configurar', changeFolder: 'Cambiar carpeta', gettingStarted: 'Primeros pasos', showTutorial: 'Ver tutorial', highlightYellow: 'Resaltar amarillo', highlightGreen: 'Resaltar verde', highlightPink: 'Resaltar rosa', highlightBlue: 'Resaltar azul', removeHighlight: 'Quitar resaltado',
     commandPalette: 'Paleta de comandos', paletteOpenPlaceholder: 'Abrir archivo…', paletteHint: 'Escribe para filtrar los documentos de la carpeta', typeToSearch: 'Escribe una palabra o frase.', noResults: 'No se encontraron resultados.', currentLibrary: 'Biblioteca actual', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Abrir Inbox', pendingCaptures: 'Capturas pendientes', systemPicker: 'Selector del sistema', changeLibrary: 'Cambiar biblioteca', folderNavigationShortcut: 'Ctrl+Shift+F', focusMode: 'Modo concentración', focusModeShortcut: 'Ctrl/Cmd+Shift+L', navigation: 'Navegación', openCodex: 'Abrir Codex', themeModes: 'Claro / oscuro', newPageLabel: 'NUEVA PÁGINA', createMarkdown: 'Crear Markdown', title: 'Título', titlePlaceholder: 'Idea sobre el proyecto', createdIn: 'Se creará en', createAndEdit: 'Crear y editar', captureClipboard: 'Capturar portapapeles', addFile: 'Añadir archivo', capture: 'Capturar', captures: 'Capturas', backlinks: 'Backlinks',
     quickCaptureLabel: 'CAPTURA RÁPIDA', quickCaptureTitle: 'Guarda lo que tienes en mente', quickCapturePlaceholder: 'Escribe o pega texto, una URL o una idea…', quickCaptureHint: 'Enter guarda · Shift+Enter crea una línea · Esc cierra', inboxWorkspace: 'ESPACIO DE CAPTURA', inboxTitle: 'Inbox', inboxHomeHint: 'Captura ahora, organiza después.', newCapture: 'Nueva captura', chooseInbox: 'Elige una carpeta para tu Inbox', chooseInboxHint: 'Las capturas serán archivos locales normales, siempre bajo tu control.', chooseFolder: 'Elegir carpeta', importFiles: 'Importar archivos', selectCapture: 'Selecciona una captura', selectCaptureHint: 'Aquí podrás revisar y procesar lo que guardaste.', collections: 'Colecciones', sortBy: 'Ordenar por', mostRecent: 'Más reciente', name: 'Nombre', color: 'Color', quickAccess: 'Acceso rápido', favorites: 'Favoritos', activity: 'Actividad', recent: 'Recientes', editLibrary: 'Editar biblioteca', optionalIcon: 'Icono opcional', saveChanges: 'Guardar cambios', openInFolder: 'Abrir en carpeta',
     noRecentHome: 'No hay archivos recientes.', noFavoritesHome: 'Aún no has añadido favoritos.', fileCount: 'archivos', unknownError: 'error desconocido', folderNoDocuments: 'La carpeta no tiene documentos compatibles.', noHeadings: 'El documento no tiene encabezados.', visualNoHeadings: 'Este documento no usa encabezados Markdown.', sections: 'secciones', words: 'palabras', lines: 'líneas', referencesMarkdown: 'Las referencias se calculan para Markdown.', noOutgoing: 'Sin enlaces salientes.', noBacklinks: 'Sin backlinks.', unresolvedLink: 'Enlace no resuelto', minimal: 'Mínimo', low: 'Bajo', medium: 'Medio', high: 'Alto', xhigh: 'Muy alto', max: 'Máximo', bold: 'Negrita', italic: 'Cursiva', strike: 'Tachado', inlineCode: 'Código inline', headingOne: 'Título 1', headingTwo: 'Título 2', headingThree: 'Título 3', paragraph: 'Párrafo normal', quote: 'Cita', bulletList: 'Lista', numberedList: 'Lista numerada', removeFormat: 'Quitar formato',
@@ -647,7 +672,7 @@ const TRANSLATIONS = {
     sidebarToggle: 'Show or hide sidebar', sidebarTooltip: 'Sidebar', openFile: 'Open file', openFolder: 'Open folder', newNote: 'New Markdown page', newNoteTooltip: 'New page · Ctrl+N', folderSearch: 'Search folder · Ctrl+Shift+F', quickOpen: 'Quick open', quickOpenTooltip: 'Quick open · Ctrl+P', quickCapture: 'Quick capture', quickCaptureTooltip: 'Quick capture · Ctrl+Alt+Space', searchLabel: 'Search',
     assistant: 'Codex assistant', codex: 'Codex AI', favoriteAdd: 'Add to favorites', favoriteRemove: 'Remove from favorites', index: 'Table of contents', settings: 'Settings', openTabs: 'Open files', searchPlaceholder: 'Titles, text, code…', read: 'Read', edit: 'Edit', save: 'Save', fileLabel: 'File', noFile: 'No file open', openHint: 'Open or drop a file to view it.', folderLabel: 'Folder', folderHint: 'Open a library to explore its documents.', recentsLabel: 'Recent', noRecents: 'No recent files yet.', referencesLabel: 'References', referencesHint: 'Open a Markdown file to see its links.', clearReading: 'Clear reading', readyTitle: 'Ready to open your documents', readyLead: 'A lightweight viewer with libraries, visual editing and wiki navigation.', dropzone: 'Drop your .md file here or use the button above.', tocSections: '0 sections', closeIndex: 'Close table of contents', tocEmpty: 'The table of contents will appear here.',
     codexChat: 'Codex chat', closeCodex: 'Close Codex', localAssistant: 'Local assistant', disconnected: 'Disconnected', codexNotice: 'Open a Markdown file to start the conversation.', codexInputPlaceholder: 'Ask about the Markdown…', modelAndEffort: 'Model and effort', model: 'Model', loading: 'Loading…', effort: 'Effort', default: 'Default', context: 'Context', documentContext: 'Markdown + references', folderContext: 'Entire folder', permissions: 'Permissions', readOnly: 'Read only', writeMarkdown: 'Edit Markdown', allowWeb: 'Allow web search in this message', cancel: 'Cancel', send: 'Send',
-    settingsTitle: 'Settings', theme: 'Theme', light: 'Light', dark: 'Dark', fontSize: 'Font size', accentColor: 'Accent color', gold: 'Gold', teal: 'Teal', coral: 'Coral', green: 'Green', purple: 'Purple', readerFont: 'Reading font', history: 'History', clearRecents: 'Clear recent files', globalCapture: 'Global capture', inboxShortcut: 'Inbox global shortcut', saveShortcut: 'Save shortcut', inboxFolder: 'Inbox folder', notConfigured: 'Not configured', changeFolder: 'Change folder', gettingStarted: 'Getting started', showTutorial: 'View tutorial', highlightYellow: 'Highlight yellow', highlightGreen: 'Highlight green', highlightPink: 'Highlight pink', highlightBlue: 'Highlight blue', removeHighlight: 'Remove highlight',
+    settingsTitle: 'Settings', theme: 'Theme', light: 'Light', dark: 'Dark', fontSize: 'Font size', accentColor: 'Accent color', gold: 'Gold', teal: 'Teal', coral: 'Coral', green: 'Green', purple: 'Purple', readerFont: 'Reading font', readingLayout: 'Reading layout', readingWidth: 'Column width', readingWidthAuto: 'Automatic', readingLineHeight: 'Line spacing', readingMargin: 'Margins', readingLayoutReset: 'Reset reading settings', readingMultiplier: '×', history: 'History', clearRecents: 'Clear recent files', globalCapture: 'Global capture', inboxShortcut: 'Inbox global shortcut', saveShortcut: 'Save shortcut', inboxFolder: 'Inbox folder', notConfigured: 'Not configured', changeFolder: 'Change folder', gettingStarted: 'Getting started', showTutorial: 'View tutorial', highlightYellow: 'Highlight yellow', highlightGreen: 'Highlight green', highlightPink: 'Highlight pink', highlightBlue: 'Highlight blue', removeHighlight: 'Remove highlight',
     commandPalette: 'Command palette', paletteOpenPlaceholder: 'Open file…', paletteHint: 'Type to filter the folder documents', typeToSearch: 'Type a word or phrase.', noResults: 'No results found.', currentLibrary: 'Current library', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Open Inbox', pendingCaptures: 'Pending captures', systemPicker: 'System picker', changeLibrary: 'Change library', folderNavigationShortcut: 'Ctrl+Shift+F', focusMode: 'Focus mode', focusModeShortcut: 'Ctrl/Cmd+Shift+L', navigation: 'Navigation', openCodex: 'Open Codex', themeModes: 'Light / dark', newPageLabel: 'NEW PAGE', createMarkdown: 'Create Markdown', title: 'Title', titlePlaceholder: 'Idea about the project', createdIn: 'Created in', createAndEdit: 'Create and edit', captureClipboard: 'Capture clipboard', addFile: 'Add file', capture: 'Capture', captures: 'Captures', backlinks: 'Backlinks',
     quickCaptureLabel: 'QUICK CAPTURE', quickCaptureTitle: 'Save what is on your mind', quickCapturePlaceholder: 'Type or paste text, a URL or an idea…', quickCaptureHint: 'Enter saves · Shift+Enter adds a line · Esc closes', inboxWorkspace: 'CAPTURE SPACE', inboxTitle: 'Inbox', inboxHomeHint: 'Capture now, organize later.', newCapture: 'New capture', chooseInbox: 'Choose a folder for your Inbox', chooseInboxHint: 'Captures are regular local files, always under your control.', chooseFolder: 'Choose folder', importFiles: 'Import files', selectCapture: 'Select a capture', selectCaptureHint: 'Review and process what you saved here.', collections: 'Collections', sortBy: 'Sort by', mostRecent: 'Most recent', name: 'Name', color: 'Color', quickAccess: 'Quick access', favorites: 'Favorites', activity: 'Activity', recent: 'Recent', editLibrary: 'Edit library', optionalIcon: 'Optional icon', saveChanges: 'Save changes', openInFolder: 'Open in folder',
     noRecentHome: 'No recent files.', noFavoritesHome: 'You have not added favorites yet.', fileCount: 'files', unknownError: 'unknown error', folderNoDocuments: 'The folder has no supported documents.', noHeadings: 'This document has no headings.', visualNoHeadings: 'This document does not use Markdown headings.', sections: 'sections', words: 'words', lines: 'lines', referencesMarkdown: 'References are calculated for Markdown.', noOutgoing: 'No outgoing links.', noBacklinks: 'No backlinks.', unresolvedLink: 'Unresolved link', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Very high', max: 'Maximum', bold: 'Bold', italic: 'Italic', strike: 'Strikethrough', inlineCode: 'Inline code', headingOne: 'Heading 1', headingTwo: 'Heading 2', headingThree: 'Heading 3', paragraph: 'Normal paragraph', quote: 'Quote', bulletList: 'Bullet list', numberedList: 'Numbered list', removeFormat: 'Remove formatting',
@@ -676,6 +701,7 @@ function applyLanguage(language) {
     const value = labels[element.dataset.i18n]
     if (value) element.textContent = value
   })
+  readingLayout?.refreshLabels()
   document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => { const value = labels[element.dataset.i18nPlaceholder]; if (value) element.placeholder = value })
   document.querySelectorAll('[data-i18n-aria]').forEach((element) => {
     const value = labels[element.dataset.i18nAria]
@@ -1024,6 +1050,7 @@ void refreshInbox()
   })()
 }))
 
+const readingLayout = createReadingLayout({ storage: localStorage, reader, getKind: () => state.documentKind, translate: (key) => t(key) })
 applyLanguage(state.language)
 updater = initializeUpdater({ language: () => state.language, hasUnsavedChanges: () => state.dirty })
 
@@ -1710,6 +1737,7 @@ async function loadVisualFile(path, kind, entry, generation) {
     info = await renderVisualDocument(reader, payload, path)
   }
   if (!isCurrentLoad(generation)) return
+  readingLayout.apply()
   state.visualInfo = info
   fileNameLabel.textContent = state.fileName
   metaInfo.textContent = visualDetail(info) || kind
@@ -1787,6 +1815,7 @@ function applyDocument(fileName, filePath, markdown, html) {
 
   reader.classList.remove('empty')
   reader.innerHTML = html
+  readingLayout.apply()
   decorateRenderedContent()
   updateMeta()
   renderToc()
