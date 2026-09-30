@@ -28,7 +28,7 @@ Pliego comprueba al iniciarse si hay una nueva versión publicada y ofrece insta
 
 El updater de Tauri verifica la firma de cada paquete. La clave pública está en `src-tauri/tauri.conf.json`; la privada debe conservarse en un almacén seguro y en el secreto de GitHub Actions `TAURI_SIGNING_PRIVATE_KEY`. Esta clave no tiene contraseña, por lo que el workflow fija `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` como cadena vacía para evitar una solicitud interactiva. No incluir la clave privada en Git ni imprimirla en logs. Conservar una copia segura de la clave: perder la clave impediría actualizar a quienes instalaron una versión que confía en ella.
 
-El job de publicación comprueba que el borrador incluye `latest.json`, firmas `.sig` y paquetes de actualización para AppImage, Windows y ambas arquitecturas macOS. El `latest.json` debe apuntar a los archivos del mismo tag y contener entradas válidas para cada plataforma. Probar la actualización real desde una instalación de la versión anterior en cada sistema; una compilación correcta no demuestra que la instalación y el reinicio funcionen.
+El job de publicación verifica criptográficamente los paquetes contra la clave pública de la aplicación, convierte las URLs del borrador en enlaces públicos de descarga y comprueba que incluye `latest.json`, firmas `.sig` y paquetes de actualización para AppImage, Windows y ambas arquitecturas macOS. El `latest.json` debe apuntar a los archivos del mismo tag y contener entradas válidas para cada plataforma. Probar la actualización real desde una instalación de la versión anterior en cada sistema; una compilación correcta no demuestra que la instalación y el reinicio funcionen.
 
 ## Firma de código
 
@@ -50,3 +50,5 @@ La release permanece como borrador hasta que los jobs de ambas arquitecturas mac
 ### Windows
 
 Los builds de Windows continúan sin certificado Authenticode y pueden mostrar una advertencia de SmartScreen.
+
+Si los builds terminaron correctamente pero falla la publicación, se puede ejecutar el workflow manualmente con `publish_existing` para revalidar y publicar el borrador completo sin recompilar. Esta opción conserva la verificación de todas las firmas y plataformas.

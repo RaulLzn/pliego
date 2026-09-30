@@ -5,6 +5,11 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
+    inputs:
+      publish_existing:
+        description: "Validate and publish an existing complete draft without rebuilding"
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ github.ref }}
@@ -31,6 +36,7 @@ jobs:
           fi
 
   build:
+    if: ${{ !inputs.publish_existing }}
     needs: validate-version
     strategy:
       fail-fast: false
@@ -111,6 +117,7 @@ jobs:
           echo "Verified macOS ad-hoc signature: $app_path"
 
   publish:
+    if: ${{ !cancelled() && needs.validate-version.result == 'success' && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.publish_existing)) }}
     needs: [validate-version, build]
     runs-on: ubuntu-22.04
     steps:
@@ -126,6 +133,7 @@ jobs:
         run: |
           mkdir -p release-check
           gh release view "v${VERSION}" --repo "$GITHUB_REPOSITORY" --json assets > release-check/release.json
-          gh release download "v${VERSION}" --repo "$GITHUB_REPOSITORY" --pattern latest.json --pattern '*.sig' --dir release-check
+          gh release download "v${VERSION}" --repo "$GITHUB_REPOSITORY" --pattern latest.json --pattern '*.sig' --pattern '*.AppImage' --pattern '*.app.tar.gz' --pattern '*.exe' --pattern '*.msi' --pattern '*.rpm' --pattern '*.deb' --dir release-check
           node scripts/validate-updater.mjs release-check "$VERSION" "$GITHUB_REPOSITORY"
+          gh release upload "v${VERSION}" --repo "$GITHUB_REPOSITORY" release-check/latest.json --clobber
           gh release edit "v${VERSION}" --repo "$GITHUB_REPOSITORY" --draft=false --latest
