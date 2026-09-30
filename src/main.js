@@ -1943,6 +1943,7 @@ async function loadVisualFile(path, kind, entry, generation, { restorePosition =
   highlightSelectionRange = null
   readerWrap.scrollTop = 0
   reader.classList.remove('editing')
+  readingLayout.apply()
   reader.contentEditable = 'false'
   modeReadButton.classList.add('active')
   modeEditButton.classList.remove('active')
@@ -1961,7 +1962,6 @@ async function loadVisualFile(path, kind, entry, generation, { restorePosition =
     info = await renderVisualDocument(reader, payload, path, { isCurrent: () => isCurrentLoad(generation) })
   }
   if (!isCurrentLoad(generation)) return
-  readingLayout.apply()
   state.documentLoading = false
   state.visualInfo = info
   annotationsPanelController.setDocument({ key: annotationDocumentKey(path, payload.fileName), kind, name: payload.fileName })
