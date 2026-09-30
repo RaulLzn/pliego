@@ -4,6 +4,8 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 
 ## Unreleased
 
+## [1.7.0] - 2026-09-30
+
 ### Lectura y anotaciones
 
 - Restauración de pestañas, documento activo y posición de lectura al volver a abrir Pliego. Los PDF recuerdan la página y la posición dentro de ella; los archivos abiertos desde el sistema tienen prioridad al iniciar.
