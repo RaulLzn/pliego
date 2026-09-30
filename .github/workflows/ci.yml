@@ -44,6 +44,9 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Test frontend logic
+        run: npm run test:unit
+
       - name: Build frontend
         run: npm run build
 

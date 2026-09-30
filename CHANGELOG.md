@@ -4,6 +4,14 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 
 ## Unreleased
 
+### Lectura y anotaciones
+
+- Restauración de pestañas, documento activo y posición de lectura al volver a abrir Pliego. Los PDF recuerdan la página y la posición dentro de ella; los archivos abiertos desde el sistema tienen prioridad al iniciar.
+- Modo concentración para leer o editar sin paneles, con Ctrl/Cmd+Mayús+L y Escape para recuperar los controles.
+- Ajustes persistentes de ancho de columna, interlineado y márgenes, con opción de restablecerlos.
+- Panel de resaltados y notas para Markdown, con comentarios locales, salto al fragmento original y conservación de notas cuyo texto original cambió.
+- Protección del resaltado para impedir que su guardado modifique documentos de otros formatos.
+
 ## [1.6.0] - 2026-09-30
 
 ### Actualizaciones

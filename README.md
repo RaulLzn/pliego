@@ -13,12 +13,15 @@ Pliego works locally: your documents never pass through intermediary servers. Th
 ## Features
 
 - Markdown, plain text, PDF, DOCX, EPUB, CSV/TSV, images, and Mermaid.
-- Libraries, favorites, recent files, and document tabs.
+- Libraries, favorites, recent files, and document tabs restored across restarts.
+- Per-document reading positions, including PDF page and within-page position.
+- Focus mode for reading and editing (Ctrl/Cmd+Shift+L; Escape to exit).
 - Document and library search, quick open, and a command palette.
 - Wiki links, backlinks, outgoing references, and broken-link detection.
 - Visual Markdown editing with highlighting and frontmatter preservation.
+- A Markdown highlights and notes panel with local comments and links to the original passage (Ctrl/Cmd+Shift+A).
 - PDF, table, and EPUB rendering optimized for large documents.
-- Light and dark themes, customizable fonts and scale, plus English and Spanish interfaces.
+- Light and dark themes, customizable fonts, scale, column width, line spacing, and margins, plus English and Spanish interfaces.
 - Optional Codex assistant with separate read and write permissions.
 
 ## Quick installation
