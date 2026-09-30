@@ -5,24 +5,26 @@ export function decodeBase64(value) {
   return bytes
 }
 
-export async function renderVisualDocument(reader, payload, path) {
+export async function renderVisualDocument(reader, payload, path, { isCurrent = () => true } = {}) {
+  throwIfStale(isCurrent)
   reader._visualCleanup?.()
   reader._visualCleanup = null
   const bytes = decodeBase64(payload.base64)
   reader.classList.remove('empty')
   reader.classList.add('visual-document')
-  if (payload.kind === 'pdf') return renderPdf(reader, bytes)
-  if (payload.kind === 'docx') return renderDocx(reader, bytes)
-  if (payload.kind === 'epub') return renderEpub(reader, bytes)
+  if (payload.kind === 'pdf') return renderPdf(reader, bytes, isCurrent)
+  if (payload.kind === 'docx') return renderDocx(reader, bytes, isCurrent)
+  if (payload.kind === 'epub') return renderEpub(reader, bytes, isCurrent)
   if (payload.kind === 'image') return renderImage(reader, bytes, path)
   throw new Error(uiText(`El formato ${payload.kind} todavía no tiene renderizador visual`, `The ${payload.kind} format does not have a visual renderer yet`))
 }
 
-async function renderPdf(reader, bytes) {
+async function renderPdf(reader, bytes, isCurrent) {
   const [pdfjs, worker] = await Promise.all([
     import('pdfjs-dist'),
     import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
   ])
+  throwIfStale(isCurrent)
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default
   reader.innerHTML = `<div class="visual-loading">${uiText('Preparando páginas…', 'Preparing pages…')}</div>`
   const loadingTask = pdfjs.getDocument({ data: bytes })
@@ -33,7 +35,7 @@ async function renderPdf(reader, bytes) {
   let resizeTimer
   let intersectionObserver
   let resizeObserver
-  reader._visualCleanup = () => {
+  const cleanup = () => {
     if (disposed) return
     disposed = true
     intersectionObserver?.disconnect()
@@ -47,17 +49,30 @@ async function renderPdf(reader, bytes) {
     }
     void (pdf ? pdf.destroy() : loadingTask.destroy()).catch(() => {})
   }
+  reader._visualCleanup = cleanup
   pdf = await loadingTask.promise
-  if (disposed) throw new DOMException(uiText('Carga cancelada', 'Load cancelled'), 'AbortError')
+  if (disposed || !isCurrent()) {
+    cleanup()
+    throw cancelledError()
+  }
   const shell = document.createElement('div')
   shell.className = 'pdf-document'
   reader.innerHTML = ''
   reader.appendChild(shell)
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-    if (disposed) throw new DOMException(uiText('Carga cancelada', 'Load cancelled'), 'AbortError')
+    if (disposed || !isCurrent()) {
+      cleanup()
+      throw cancelledError()
+    }
     const page = await pdf.getPage(pageNumber)
+    if (disposed || !isCurrent()) {
+      page.cleanup()
+      cleanup()
+      throw cancelledError()
+    }
     const slot = document.createElement('div')
     slot.className = 'pdf-page-slot'
+    slot.dataset.pageNumber = String(pageNumber)
     const canvas = document.createElement('canvas')
     canvas.className = 'pdf-page'
     slot.appendChild(canvas)
@@ -111,24 +126,30 @@ async function renderPdf(reader, bytes) {
     }, 120)
   })
   resizeObserver.observe(shell)
+  throwIfStale(isCurrent)
   return { words: 0, detail: uiText(`${pdf.numPages} páginas`, `${pdf.numPages} pages`), detailEs: `${pdf.numPages} páginas`, detailEn: `${pdf.numPages} pages` }
 }
 
-async function renderDocx(reader, bytes) {
+async function renderDocx(reader, bytes, isCurrent) {
   const { default: mammoth } = await import('mammoth/mammoth.browser')
+  throwIfStale(isCurrent)
   const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer })
+  throwIfStale(isCurrent)
   reader.innerHTML = `<div class="office-document">${sanitizeHtml(result.value)}</div>`
   return { words: textWords(reader.textContent), detail: uiText('Documento Word', 'Word document'), detailEs: 'Documento Word', detailEn: 'Word document' }
 }
 
-async function renderEpub(reader, bytes) {
+async function renderEpub(reader, bytes, isCurrent) {
   const { default: JSZip } = await import('jszip')
+  throwIfStale(isCurrent)
   const zip = await JSZip.loadAsync(bytes)
   const container = await zip.file('META-INF/container.xml')?.async('text')
+  throwIfStale(isCurrent)
   if (!container) throw new Error(uiText('EPUB inválido: falta container.xml', 'Invalid EPUB: container.xml is missing'))
   const containerXml = new DOMParser().parseFromString(container, 'application/xml')
   const opfPath = containerXml.querySelector('rootfile')?.getAttribute('full-path')
   const opfText = opfPath ? await zip.file(opfPath)?.async('text') : ''
+  throwIfStale(isCurrent)
   if (!opfText) throw new Error(uiText('EPUB inválido: no se encontró el paquete', 'Invalid EPUB: package not found'))
   const opf = new DOMParser().parseFromString(opfText, 'application/xml')
   const manifest = new Map(Array.from(opf.querySelectorAll('manifest item')).map((item) => [item.getAttribute('id'), item.getAttribute('href')]))
@@ -140,6 +161,7 @@ async function renderEpub(reader, bytes) {
     const file = zip.file(base + decodeURIComponent(href))
     if (file) chapterFiles.push(file)
   }
+  throwIfStale(isCurrent)
   reader.innerHTML = `<div class="ebook-document"></div><div class="visual-loading">${uiText('Cargando más capítulos…', 'Loading more chapters…')}</div>`
   const shell = reader.querySelector('.ebook-document')
   const sentinel = reader.querySelector('.visual-loading')
@@ -148,12 +170,12 @@ async function renderEpub(reader, bytes) {
   let disposed = false
   let words = 0
   const appendBatch = async () => {
-    if (loading || disposed || nextChapter >= chapterFiles.length) return
+    if (loading || disposed || !isCurrent() || nextChapter >= chapterFiles.length) return
     loading = true
     const end = Math.min(chapterFiles.length, nextChapter + 4)
     for (; nextChapter < end && !disposed; nextChapter += 1) {
       const html = await chapterFiles[nextChapter].async('text')
-      if (disposed) break
+      if (disposed || !isCurrent()) break
       const doc = new DOMParser().parseFromString(html, 'text/html')
       const chapter = document.createElement('section')
       chapter.className = 'ebook-chapter'
@@ -171,6 +193,7 @@ async function renderEpub(reader, bytes) {
   observer.observe(sentinel)
   reader._visualCleanup = () => { disposed = true; observer.disconnect() }
   await appendBatch()
+  throwIfStale(isCurrent)
   return { words, detail: uiText(`${chapterFiles.length} capítulos · carga progresiva`, `${chapterFiles.length} chapters · progressive loading`), detailEs: `${chapterFiles.length} capítulos · carga progresiva`, detailEn: `${chapterFiles.length} chapters · progressive loading` }
 }
 
@@ -200,8 +223,9 @@ function renderImage(reader, bytes, path) {
   return { words: 0, detail: uiText('Imagen', 'Image'), detailEs: 'Imagen', detailEn: 'Image' }
 }
 
-export async function renderTableDocument(reader, text, delimiter) {
+export async function renderTableDocument(reader, text, delimiter, { isCurrent = () => true } = {}) {
   const { default: Papa } = await import('papaparse')
+  throwIfStale(isCurrent)
   const parsed = Papa.parse(text, { delimiter, skipEmptyLines: true })
   const rows = parsed.data
   const head = rows[0] || []
@@ -245,13 +269,15 @@ export async function renderTableDocument(reader, text, delimiter) {
   return { words: rows.reduce((total, row) => total + row.length, 0), detail: uiText(detailEs, detailEn), detailEs, detailEn }
 }
 
-export async function renderMermaidDocument(reader, source) {
+export async function renderMermaidDocument(reader, source, { isCurrent = () => true } = {}) {
   const { default: mermaid } = await import('mermaid')
+  throwIfStale(isCurrent)
   mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: mermaidTheme() })
   reader.classList.remove('empty')
   reader.classList.add('visual-document')
   const id = `mermaid-${Date.now()}`
   const { svg } = await mermaid.render(id, source)
+  throwIfStale(isCurrent)
   reader.innerHTML = `<div class="diagram-document">${svg}</div>`
   return { words: textWords(source), detail: uiText('Diagrama Mermaid', 'Mermaid diagram'), detailEs: 'Diagrama Mermaid', detailEn: 'Mermaid diagram' }
 }
@@ -282,6 +308,14 @@ function mermaidTheme() {
 
 function uiText(es, en) {
   return globalThis.document?.documentElement?.lang === 'en' ? en : es
+}
+
+function throwIfStale(isCurrent) {
+  if (!isCurrent()) throw cancelledError()
+}
+
+function cancelledError() {
+  return new DOMException(uiText('Carga cancelada', 'Load cancelled'), 'AbortError')
 }
 
 function sanitizeHtml(html) {

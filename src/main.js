@@ -16,6 +16,7 @@ import TurndownService from 'turndown'
 import { gfm } from 'turndown-plugin-gfm'
 import { decodeBase64, renderMermaidBlocks, renderMermaidDocument, renderTableDocument, renderVisualDocument } from './document-renderers.js'
 import { createOnboarding, onboardingCompleted } from './onboarding.js'
+import { createReadingSession, filterKnownMissingTabs, selectStartupPlan } from './reading-session.js'
 import { initializeUpdater } from './updates.js'
 import { createFocusMode } from './focus-mode.js'
 import { createReadingLayout } from './reading-layout.js'
@@ -95,7 +96,17 @@ const state = {
   visualInfo: null,
   loadGeneration: 0,
   folderLoadGeneration: 0,
+  documentLoading: false,
 }
+
+const readingSession = createReadingSession()
+const startupReadingSession = readingSession.load()
+let startupIsRunning = true
+let pendingStartupPaths = []
+const startupHandledPaths = new Set()
+let readingInteractionEpoch = 0
+let pendingUserScroll = false
+let pendingUserScrollTimer = null
 
 document.querySelector('#app').innerHTML = `
   <div class="shell">
@@ -465,6 +476,30 @@ const newNoteModal = $('#newNoteModal')
 const newNoteInput = $('#newNoteInput')
 const newNotePath = $('#newNotePath')
 const newNoteError = $('#newNoteError')
+
+function markReadingInteraction() {
+  readingInteractionEpoch += 1
+}
+
+function noteUserScrollIntent() {
+  markReadingInteraction()
+  pendingUserScroll = true
+  clearTimeout(pendingUserScrollTimer)
+  pendingUserScrollTimer = setTimeout(() => { pendingUserScroll = false }, 1200)
+}
+
+readerWrap.addEventListener('pointerdown', markReadingInteraction)
+readerWrap.addEventListener('wheel', noteUserScrollIntent, { passive: true })
+readerWrap.addEventListener('touchmove', noteUserScrollIntent, { passive: true })
+readerWrap.addEventListener('scroll', () => {
+  if (!pendingUserScroll || state.documentLoading) return
+  pendingUserScroll = false
+  clearTimeout(pendingUserScrollTimer)
+  recordCurrentReadingPosition()
+})
+window.addEventListener('keydown', (event) => {
+  if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key)) noteUserScrollIntent()
+})
 let newNotePreviousFocus = null
 const quickCapture = $('#quickCapture')
 const quickCaptureInput = $('#quickCaptureInput')
@@ -1504,13 +1539,14 @@ async function openFolder() {
   }
 }
 
-async function loadFolder(dir) {
+async function loadFolder(dir, { suppressErrors = false } = {}) {
   if (state.mode === 'edit' && state.dirty) {
     showMessage(uiText('Tienes cambios sin guardar. Guarda el documento antes de cambiar de biblioteca.', 'You have unsaved changes. Save the document before changing libraries.'))
     return false
   }
   const folder = typeof dir === 'string' ? dir.trim() : ''
   if (!folder) return false
+  recordCurrentReadingPosition()
   const generation = ++state.folderLoadGeneration
   state.loadGeneration += 1
   showMessage(uiText('Cargando biblioteca…', 'Loading library…'))
@@ -1530,11 +1566,15 @@ async function loadFolder(dir) {
     renderTree(nodes)
     toggleSidebar(true)
     renderDocumentTabs()
+    if (!startupIsRunning) persistOpenTabs()
     if (!codexPanel.classList.contains('hidden') && state.codexContext === 'folder') void restoreCodexContext()
     hideMessage()
     return true
   } catch (error) {
-    if (generation === state.folderLoadGeneration) showMessage(`${uiText('No pude leer la carpeta: ', 'Could not read the folder: ')}${formatError(error)}`)
+    if (generation === state.folderLoadGeneration) {
+      if (suppressErrors) hideMessage()
+      else showMessage(`${uiText('No pude leer la carpeta: ', 'Could not read the folder: ')}${formatError(error)}`)
+    }
     return false
   }
 }
@@ -1619,20 +1659,146 @@ window.addEventListener('keydown', (event) => {
 })
 
 async function loadInitialFile() {
-  const savedFolder = localStorage.getItem(FOLDER_KEY)
-  if (savedFolder) await loadFolder(savedFolder)
+  let launchPaths = []
   try {
-    const paths = await invoke('get_launch_paths')
-    await openSystemFiles(paths)
+    launchPaths = await invoke('get_launch_paths')
   } catch (_) {
     // Fuera de Tauri.
   }
+
+  const plan = selectStartupPlan({ launchPaths, pendingPaths: pendingStartupPaths, session: startupReadingSession })
+  if (plan.type === 'system-files') {
+    await openSystemFiles(plan.paths, { startupLaunch: true })
+  } else if (plan.type === 'reading-session') {
+    await restoreReadingSession(plan.session)
+  } else {
+    const savedFolder = readSavedFolder()
+    if (savedFolder) await loadFolder(savedFolder)
+  }
+
+  while (pendingStartupPaths.length) {
+    const paths = pendingStartupPaths.splice(0)
+    const unseen = paths.filter((path) => !startupHandledPaths.has(path))
+    if (unseen.length) await openSystemFiles(unseen, { startupLaunch: true })
+  }
+  startupIsRunning = false
 }
 
-async function openSystemFiles(paths) {
+function readSavedFolder() {
+  try { return localStorage.getItem(FOLDER_KEY) || '' } catch (_) { return '' }
+}
+
+function receiveSystemFiles(paths) {
   if (!Array.isArray(paths)) return
-  const uniquePaths = [...new Set(paths.filter((path) => typeof path === 'string' && path.length > 0))]
-  for (const path of uniquePaths) await loadFileFromPath(path)
+  const unique = [...new Set(paths.filter((path) => typeof path === 'string' && path.length > 0))]
+  if (startupIsRunning) {
+    pendingStartupPaths.push(...unique)
+    return
+  }
+  void openSystemFiles(unique)
+}
+
+async function openSystemFiles(paths, { startupLaunch = false } = {}) {
+  if (!Array.isArray(paths)) return
+  let uniquePaths = [...new Set(paths.filter((path) => typeof path === 'string' && path.length > 0))]
+  if (startupLaunch) {
+    uniquePaths = uniquePaths.filter((path) => !startupHandledPaths.has(path))
+    uniquePaths.forEach((path) => startupHandledPaths.add(path))
+  }
+  if (!uniquePaths.length) return
+
+  if (startupLaunch && !(state.mode === 'edit' && state.dirty)) {
+    if (state.filePath) {
+      recordCurrentReadingPosition()
+      beginDocumentLoad()
+      clearCurrentDocument()
+    }
+    state.openTabs = []
+    renderDocumentTabs()
+  }
+  for (const path of uniquePaths) await loadFileFromPath(path, { suppressErrors: startupLaunch })
+  if (startupLaunch && !(state.mode === 'edit' && state.dirty)) persistOpenTabs()
+}
+
+async function restoreReadingSession(savedSession) {
+  const session = savedSession
+  const activeTab = session.tabs.find((tab) => tab.path === session.activePath) || session.tabs.at(-1)
+  const savedFolder = readSavedFolder()
+  const activeFolder = activeTab ? parentFolder(activeTab.path) : ''
+  const firstFolder = savedFolder && activeTab && isPathWithinFolder(activeTab.path, savedFolder)
+    ? savedFolder
+    : activeFolder || savedFolder
+  const folders = [...new Set([firstFolder, savedFolder, activeFolder].filter(Boolean))]
+  const unavailableFolders = []
+
+  for (const folder of folders) {
+    if (pendingStartupPaths.length) return false
+    if (await loadFolder(folder, { suppressErrors: true })) break
+    unavailableFolders.push(folder)
+  }
+  if (pendingStartupPaths.length) return false
+
+  let tabs = filterKnownMissingTabs(session, (path) => (
+    Boolean(state.folder) && isPathWithinFolder(path, state.folder) && !state.documentIndex.some((entry) => entry.path === path)
+  ))
+  if (!tabs.tabs.length) {
+    state.openTabs = []
+    renderDocumentTabs()
+    persistOpenTabs()
+    return false
+  }
+
+  state.openTabs = tabs.tabs.map((tab) => ({ ...tab }))
+  renderDocumentTabs()
+  const preferredPath = tabs.tabs.some((tab) => tab.path === session.activePath)
+    ? session.activePath
+    : tabs.activePath
+  const candidates = [
+    ...tabs.tabs.filter((tab) => tab.path === preferredPath),
+    ...tabs.tabs.filter((tab) => tab.path !== preferredPath),
+  ]
+
+  for (const candidate of candidates) {
+    if (pendingStartupPaths.length) return false
+    if (!state.openTabs.some((tab) => tab.path === candidate.path)) continue
+    if (unavailableFolders.some((folder) => isPathWithinFolder(candidate.path, folder))) {
+      continue
+    }
+    if (!state.folder || !isPathWithinFolder(candidate.path, state.folder)) {
+      const folder = parentFolder(candidate.path)
+      if (folder && folder !== state.folder) {
+        const folderLoaded = await loadFolder(folder, { suppressErrors: true })
+        if (!folderLoaded) unavailableFolders.push(folder)
+        if (pendingStartupPaths.length) return false
+        if (!folderLoaded) {
+          continue
+        }
+        tabs = filterKnownMissingTabs(tabs, (path) => (
+          Boolean(state.folder) && isPathWithinFolder(path, state.folder) && !state.documentIndex.some((entry) => entry.path === path)
+        ))
+        state.openTabs = tabs.tabs.map((tab) => ({ ...tab }))
+        renderDocumentTabs()
+        if (!state.openTabs.some((tab) => tab.path === candidate.path)) continue
+      }
+    }
+
+    const opened = await loadFileFromPath(candidate.path, {
+      restorePosition: readingSession.getPosition(candidate.path),
+      suppressErrors: true,
+    })
+    if (pendingStartupPaths.length) return false
+    if (opened) {
+      persistOpenTabs()
+      return true
+    }
+    tabs = filterKnownMissingTabs(tabs, (path) => path === candidate.path)
+    state.openTabs = tabs.tabs.map((tab) => ({ ...tab }))
+    renderDocumentTabs()
+  }
+
+  readingSession.setTabs(state.openTabs, tabs.activePath)
+  renderDocumentTabs()
+  return false
 }
 
 async function loadBrowserFile(file) {
@@ -1649,26 +1815,29 @@ async function loadBrowserFile(file) {
     applyDocument(file.name, '', markdown, html)
     hideMessage()
   } catch (error) {
+    if (isCurrentLoad(generation)) state.documentLoading = false
     showMessage(`${uiText('No pude leer el archivo: ', 'Could not read the file: ')}${formatError(error)}`)
   }
 }
 
-async function loadFileFromPath(path) {
+async function loadFileFromPath(path, options = {}) {
   if (state.mode === 'edit' && state.dirty) {
     showMessage(uiText('Tienes cambios sin guardar. Guarda o vuelve a Lectura antes de abrir otro archivo.', 'You have unsaved changes. Save them or switch back to Read before opening another file.'))
     return false
   }
+  recordCurrentReadingPosition()
+  const restorePosition = Object.hasOwn(options, 'restorePosition') ? options.restorePosition : readingSession.getPosition(path)
+  const interactionEpoch = readingInteractionEpoch
   if (!state.folder || !isPathWithinFolder(path, state.folder)) {
     const folder = parentFolder(path)
-    if (!folder || !(await loadFolder(folder))) return false
+    if (!folder || !(await loadFolder(folder, { suppressErrors: options.suppressErrors }))) return false
   }
   const generation = beginDocumentLoad()
   try {
     const entry = state.documentIndex.find((item) => item.path === path)
     const kind = entry?.kind || kindFromPath(path)
     if (!['markdown', 'text'].includes(kind)) {
-      await loadVisualFile(path, kind, entry, generation)
-      return true
+      return await loadVisualFile(path, kind, entry, generation, { restorePosition, interactionEpoch })
     }
     const payload = await invoke('read_markdown_file', {
       path,
@@ -1683,16 +1852,21 @@ async function loadFileFromPath(path) {
     renderReferences()
     addRecent(path, payload.fileName)
     hideMessage()
+    await restoreDocumentPosition(path, restorePosition, generation, interactionEpoch)
     return true
   } catch (error) {
     if (!isCurrentLoad(generation) || error?.name === 'AbortError') return false
-    showMessage(`${uiText('No pude abrir el archivo seleccionado: ', 'Could not open the selected file: ')}${formatError(error)}`)
+    state.documentLoading = false
+    if (!options.suppressErrors) showMessage(`${uiText('No pude abrir el archivo seleccionado: ', 'Could not open the selected file: ')}${formatError(error)}`)
     return false
   }
 }
 
 function beginDocumentLoad() {
   state.loadGeneration += 1
+  state.documentLoading = true
+  pendingUserScroll = false
+  clearTimeout(pendingUserScrollTimer)
   reader._visualCleanup?.()
   reader._visualCleanup = null
   cleanupMarkdownImages()
@@ -1703,7 +1877,7 @@ function isCurrentLoad(generation) {
   return generation === state.loadGeneration
 }
 
-async function loadVisualFile(path, kind, entry, generation) {
+async function loadVisualFile(path, kind, entry, generation, { restorePosition = null, interactionEpoch = readingInteractionEpoch } = {}) {
   const payload = await invoke('read_binary_document', { path })
   if (!isCurrentLoad(generation)) return
   state.fileName = payload.fileName
@@ -1728,16 +1902,17 @@ async function loadVisualFile(path, kind, entry, generation) {
   if (kind === 'table') {
     const text = new TextDecoder().decode(decodeBase64(payload.base64))
     state.markdown = text
-    info = await renderTableDocument(reader, text, path.toLowerCase().endsWith('.tsv') ? '\t' : ',')
+    info = await renderTableDocument(reader, text, path.toLowerCase().endsWith('.tsv') ? '\t' : ',', { isCurrent: () => isCurrentLoad(generation) })
   } else if (kind === 'mermaid') {
     const text = new TextDecoder().decode(decodeBase64(payload.base64))
     state.markdown = text
-    info = await renderMermaidDocument(reader, text)
+    info = await renderMermaidDocument(reader, text, { isCurrent: () => isCurrentLoad(generation) })
   } else {
-    info = await renderVisualDocument(reader, payload, path)
+    info = await renderVisualDocument(reader, payload, path, { isCurrent: () => isCurrentLoad(generation) })
   }
   if (!isCurrentLoad(generation)) return
   readingLayout.apply()
+  state.documentLoading = false
   state.visualInfo = info
   fileNameLabel.textContent = state.fileName
   metaInfo.textContent = visualDetail(info) || kind
@@ -1751,6 +1926,48 @@ async function loadVisualFile(path, kind, entry, generation) {
   addDocumentTab(path, payload.fileName, kind)
   updateFavoriteButton()
   hideMessage()
+  await restoreDocumentPosition(path, restorePosition, generation, interactionEpoch)
+  return true
+}
+
+function recordCurrentReadingPosition() {
+  if (!state.filePath || state.documentLoading) return false
+  if (state.documentKind === 'pdf') {
+    const rootTop = readerWrap.getBoundingClientRect().top
+    const slots = Array.from(reader.querySelectorAll('.pdf-page-slot[data-page-number]'))
+    const slot = slots.find((item) => item.getBoundingClientRect().bottom > rootTop) || slots.at(-1)
+    const page = Number(slot?.dataset.pageNumber)
+    const rect = slot?.getBoundingClientRect()
+    if (Number.isInteger(page) && page > 0 && rect?.height > 0) {
+      const offset = Math.max(0, Math.min(1, (rootTop - rect.top) / rect.height))
+      return readingSession.rememberPosition(state.filePath, { page, offset })
+    }
+  }
+  return readingSession.rememberPosition(state.filePath, { top: Math.max(0, readerWrap.scrollTop) })
+}
+
+async function restoreDocumentPosition(path, position, generation, interactionEpoch) {
+  if (!position) return false
+  await new Promise((resolve) => requestAnimationFrame(resolve))
+  if (!isCurrentLoad(generation) || state.filePath !== path || readingInteractionEpoch !== interactionEpoch) return false
+
+  if (Number.isInteger(position.page) && position.page > 0) {
+    const slots = Array.from(reader.querySelectorAll('.pdf-page-slot[data-page-number]'))
+    if (!slots.length) return false
+    const target = slots.find((slot) => Number(slot.dataset.pageNumber) === position.page)
+      || slots.reduce((nearest, slot) => Math.abs(Number(slot.dataset.pageNumber) - position.page) < Math.abs(Number(nearest.dataset.pageNumber) - position.page) ? slot : nearest)
+    const rootRect = readerWrap.getBoundingClientRect()
+    const pageRect = target.getBoundingClientRect()
+    const fraction = Math.max(0, Math.min(1, Number(position.offset) || 0))
+    readerWrap.scrollTop += pageRect.top - rootRect.top + fraction * pageRect.height
+  } else if (Number.isFinite(position.top) && position.top >= 0) {
+    const maximum = Math.max(0, readerWrap.scrollHeight - readerWrap.clientHeight)
+    readerWrap.scrollTop = Math.max(0, Math.min(maximum, position.top))
+  } else {
+    return false
+  }
+  readingSession.rememberPosition(path, position)
+  return true
 }
 
 function kindFromPath(path) {
@@ -1805,6 +2022,7 @@ function applyDocument(fileName, filePath, markdown, html) {
   state.frontmatter = splitFrontmatter(markdown)
   state.html = html
   state.dirty = false
+  state.documentLoading = false
   state.documentKind = kindFromPath(filePath || fileName)
   state.visualInfo = null
   modeEditButton.disabled = false
@@ -1829,8 +2047,19 @@ function applyDocument(fileName, filePath, markdown, html) {
 
 function addDocumentTab(path, name, kind) {
   if (!path) return
-  if (!state.openTabs.some((tab) => tab.path === path)) state.openTabs.push({ path, name, kind })
+  const current = state.openTabs.find((tab) => tab.path === path)
+  if (current) {
+    current.name = name
+    current.kind = kind
+  } else {
+    state.openTabs.push({ path, name, kind })
+  }
   renderDocumentTabs()
+  persistOpenTabs()
+}
+
+function persistOpenTabs() {
+  readingSession.setTabs(state.openTabs, state.filePath)
 }
 
 function renderDocumentTabs() {
@@ -1860,6 +2089,7 @@ async function closeDocumentTab(path) {
     showMessage(uiText('Guarda los cambios antes de cerrar esta pestaña.', 'Save your changes before closing this tab.'))
     return
   }
+  if (path === state.filePath) recordCurrentReadingPosition()
   const index = state.openTabs.findIndex((tab) => tab.path === path)
   if (index < 0) return
   state.openTabs.splice(index, 1)
@@ -1869,6 +2099,7 @@ async function closeDocumentTab(path) {
     else clearCurrentDocument()
   }
   renderDocumentTabs()
+  persistOpenTabs()
 }
 
 function clearCurrentDocument() {
@@ -1877,6 +2108,7 @@ function clearCurrentDocument() {
   state.markdown = ''
   state.visualInfo = null
   state.dirty = false
+  state.documentLoading = false
   state.mode = 'read'
   reader.contentEditable = 'false'
   reader.classList.remove('editing', 'visual-document')
@@ -2455,14 +2687,23 @@ async function listenTauriDragDrop() {
 
 void (async () => {
   try {
-    await listen('open-files', (event) => { void openSystemFiles(event.payload) })
+    await listen('open-files', (event) => receiveSystemFiles(event.payload))
   } catch (_) {
     // Fuera de Tauri.
   }
   await loadInitialFile()
 })()
 
+void appWindow.onCloseRequested(() => {
+  recordCurrentReadingPosition()
+  if (!startupIsRunning) persistOpenTabs()
+  readingSession.flush()
+}).catch(() => {})
+
 window.addEventListener('beforeunload', () => {
+  recordCurrentReadingPosition()
+  if (!startupIsRunning) persistOpenTabs()
+  readingSession.flush()
   reader._visualCleanup?.()
   reader._visualCleanup = null
   void invoke('codex_stop').catch(() => {})
