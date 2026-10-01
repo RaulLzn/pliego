@@ -1,6 +1,6 @@
 {
   "name": "pliego",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Biblioteca documental visual, r\u00e1pida y local construida con Tauri.",
   "private": true,
   "license": "MIT",

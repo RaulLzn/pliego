@@ -4,6 +4,14 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 
 ## Unreleased
 
+## [1.7.1] - 2026-09-30
+
+### Actualizaciones Linux
+
+- Actualización desde Pliego para RPM/Fedora y DEB/Debian/Ubuntu: descarga del paquete de GitHub, verificación de firma Tauri y autorización del sistema mediante polkit para instalar con DNF o APT.
+- Protección de cambios sin guardar, progreso de descarga, reintento tras cancelar permisos y limpieza de paquetes temporales.
+- Validación obligatoria de los paquetes RPM y DEB antes de publicar un release.
+
 ## [1.7.0] - 2026-09-30
 
 ### Lectura y anotaciones

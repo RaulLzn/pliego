@@ -13,6 +13,7 @@ use tauri::Manager;
 
 mod codex;
 mod inbox;
+mod package_update;
 
 const MAX_VISUAL_FILE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_TEXT_FILE_BYTES: u64 = 32 * 1024 * 1024;
@@ -827,7 +828,11 @@ pub fn run() {
             }
             Ok(())
         })
+        .manage(package_update::PackageUpdateState::default())
         .invoke_handler(tauri::generate_handler![
+            package_update::package_update_check,
+            package_update::package_update_download,
+            package_update::package_update_install,
             get_launch_paths,
             read_markdown_file,
             render_markdown_text,

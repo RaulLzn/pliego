@@ -36,6 +36,8 @@ Download the `.rpm` file and open it with your software center, or run:
 sudo dnf install ./Pliego-*.rpm
 ```
 
+Desde Pliego 1.7.1, RPM y DEB también muestran el botón **Actualizar ahora**. Pliego descarga el paquete oficial de GitHub, verifica su firma y solicita autorización del sistema para instalarlo con DNF o APT. La versión 1.7.0 requiere una última instalación manual para habilitar este flujo.
+
 ### Ubuntu, Debian, and derivatives
 
 Download the `.deb` file and open it with your system installer, or run:

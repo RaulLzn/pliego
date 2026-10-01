@@ -17,7 +17,7 @@ const key = createPublicKey({
   key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), keyPacket.subarray(10)]),
   format: 'der', type: 'spki',
 })
-for (const target of ['linux-x86_64', 'windows-x86_64', 'darwin-x86_64', 'darwin-aarch64']) {
+for (const target of ['linux-x86_64', 'linux-x86_64-rpm', 'linux-x86_64-deb', 'windows-x86_64', 'darwin-x86_64', 'darwin-aarch64']) {
   assert(manifest.platforms?.[target], `Missing target ${target}`)
 }
 const verified = new Set()
@@ -45,5 +45,8 @@ for (const [target, entry] of Object.entries(manifest.platforms)) {
   entry.url = `${prefix}${encodeURIComponent(filename)}`
 }
 assert(manifest.platforms['linux-x86_64'].url.endsWith('.AppImage'), 'Default Linux update must be AppImage')
+for (const kind of ['rpm', 'deb']) {
+  assert(manifest.platforms[`linux-x86_64-${kind}`].url.endsWith(`.${kind}`), `Wrong Linux ${kind} package`)
+}
 writeFileSync(`${directory}/latest.json`, `${JSON.stringify(manifest, null, 2)}\n`)
 console.log(`Validated ${verified.size} signed packages and public URLs for Pliego ${version}`)
