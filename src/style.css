@@ -2047,4 +2047,152 @@ a {
   .toolbar .search {
     display: none;
   }
+
+  /* Barra en tres filas: marca y modo; acciones de documento; vista y ajustes */
+  .topbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-height: 0;
+    padding: 4px 0 6px;
+    overflow: visible;
+  }
+
+  .brand {
+    flex: 1 1 auto;
+    gap: 8px;
+  }
+
+  .brand-mark {
+    width: 44px;
+    height: 44px;
+  }
+
+  .toolbar {
+    display: contents;
+  }
+
+  .toolbar .mode-group {
+    display: flex;
+    order: 1;
+    align-self: center;
+  }
+
+  .toolbar .mode-button {
+    min-height: 40px;
+    padding-inline: 14px;
+  }
+
+  .toolbar #saveButton {
+    order: 2;
+    min-height: 40px;
+  }
+
+  .toolbar > .tool-cluster:first-child {
+    order: 3;
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .toolbar #focusModeToggle {
+    order: 4;
+  }
+
+  .toolbar > .tool-cluster:last-child {
+    order: 5;
+    flex: 1 1 0;
+    justify-content: space-between;
+  }
+
+  .tool-button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Teléfono: objetivos táctiles de al menos 40 px */
+@media (max-width: 560px) {
+  .icon-button.small,
+  #annotationsClose,
+  #tocClose,
+  #libraryHomeClose {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .toolbar #focusModeToggle {
+    width: 52px;
+    height: 52px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg1);
+  }
+
+  .document-tab {
+    min-height: 40px;
+  }
+
+  .document-tab .tab-close {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin: -7px -8px -7px 0;
+  }
+
+  .accent-dot {
+    width: 32px;
+    height: 32px;
+  }
+
+  input[type='range'] {
+    height: 32px;
+  }
+
+  .toc-link,
+  .life-select summary,
+  .life-select button,
+  .sort-control button,
+  .library-edit {
+    min-height: 40px;
+  }
+
+  .library-edit {
+    min-width: 40px;
+  }
+}
+
+/* Tableta (web): cajón lateral, modo Lectura/Edición visible y botones táctiles */
+@media (max-width: 1080px) {
+  :root[data-platform='web'] .sidebar {
+    position: fixed;
+    inset: calc(env(safe-area-inset-top) + 8px) auto calc(env(safe-area-inset-bottom) + 8px) 8px;
+    z-index: 80;
+    width: min(340px, calc(100vw - 48px));
+    height: auto;
+    box-shadow: 0 18px 48px rgb(0 0 0 / 45%);
+    overflow-y: auto;
+  }
+
+  :root[data-platform='web'] .toolbar .mode-group {
+    display: flex;
+  }
+}
+
+@media (max-width: 900px) {
+  :root[data-platform='web'] .toolbar .search {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) and (min-width: 561px) {
+  .tool-button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .toolbar .mode-button {
+    min-height: 40px;
+  }
 }
