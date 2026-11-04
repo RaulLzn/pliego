@@ -28,10 +28,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            crates/pliego-render-wasm
 
       - name: Install Linux dependencies
         run: |
@@ -44,17 +47,29 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Build Markdown renderer for the web
+        run: npm run build:wasm
+
       - name: Test frontend logic
         run: npm run test:unit
 
       - name: Build frontend
         run: npm run build
 
+      - name: Build web app (PWA)
+        run: npx vite build --mode web
+
       - name: Check Rust formatting
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+        run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+          cargo fmt --manifest-path crates/pliego-render-wasm/Cargo.toml --all -- --check
 
       - name: Lint Rust
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+        run: |
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+          cargo clippy --manifest-path crates/pliego-render-wasm/Cargo.toml --target wasm32-unknown-unknown -- -D warnings
 
       - name: Test Rust
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml --locked
+          cargo test --manifest-path crates/pliego-render/Cargo.toml

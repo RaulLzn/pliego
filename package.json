@@ -16,6 +16,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "build:web": "npm run build:wasm && vite build --mode web",
+    "preview:web": "vite preview --mode web",
     "test:reading-layout": "node --test tests/reading-layout.test.js",
     "test:annotations": "node --test src/annotations.test.js",
     "preview": "vite preview",

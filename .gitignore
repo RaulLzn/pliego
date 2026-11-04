@@ -9,7 +9,10 @@ lerna-debug.log*
 
 node_modules
 dist
+dist-web
 dist-ssr
+src/platform/generated/
+crates/*/target/
 *.local
 
 # Local environment and secrets (keep sanitized examples)
