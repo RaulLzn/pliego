@@ -1,5 +1,8 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use pulldown_cmark::{html, Options, Parser};
+use pliego_render::{
+    document_kind, markdown_name_from_title, markdown_references, render_markdown,
+    strip_frontmatter,
+};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -88,30 +91,6 @@ struct CreatedMarkdown {
     path: String,
 }
 
-fn is_markdown(path: &Path) -> bool {
-    matches!(
-        path.extension()
-            .and_then(|value| value.to_str())
-            .map(|value| value.to_ascii_lowercase())
-            .as_deref(),
-        Some("md" | "markdown" | "mdown" | "mkd" | "txt")
-    )
-}
-
-fn document_kind(path: &Path) -> Option<&'static str> {
-    match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
-        "md" | "markdown" | "mdown" | "mkd" => Some("markdown"),
-        "txt" => Some("text"),
-        "csv" | "tsv" => Some("table"),
-        "pdf" => Some("pdf"),
-        "docx" => Some("docx"),
-        "epub" => Some("epub"),
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" => Some("image"),
-        "mmd" | "mermaid" => Some("mermaid"),
-        _ => None,
-    }
-}
-
 fn is_document(path: &Path) -> bool {
     document_kind(path).is_some()
 }
@@ -167,46 +146,6 @@ fn build_tree(dir: &Path) -> Result<Vec<TreeNode>, String> {
 #[tauri::command]
 fn list_markdown_tree(dir: String) -> Result<Vec<TreeNode>, String> {
     build_tree(Path::new(&dir))
-}
-
-fn markdown_references(contents: &str) -> Vec<String> {
-    let mut refs = Vec::new();
-    let mut rest = contents;
-    while let Some(start) = rest.find("[[") {
-        let after = &rest[start + 2..];
-        let Some(end) = after.find("]]") else { break };
-        let target = after[..end]
-            .split('|')
-            .next()
-            .unwrap_or("")
-            .split('#')
-            .next()
-            .unwrap_or("")
-            .trim();
-        if !target.is_empty() {
-            refs.push(target.to_string());
-        }
-        rest = &after[end + 2..];
-    }
-    let mut cursor = contents;
-    while let Some(start) = cursor.find("](") {
-        let after = &cursor[start + 2..];
-        let Some(end) = after.find(')') else { break };
-        let target = after[..end]
-            .trim()
-            .trim_matches(['<', '>'])
-            .split('#')
-            .next()
-            .unwrap_or("")
-            .trim();
-        if !target.is_empty() && !target.contains("://") && is_markdown(Path::new(target)) {
-            refs.push(target.trim_end_matches(".md").to_string());
-        }
-        cursor = &after[end + 1..];
-    }
-    refs.sort();
-    refs.dedup();
-    refs
 }
 
 fn collect_document_index(dir: &Path, entries: &mut Vec<DocumentIndexEntry>) -> Result<(), String> {
@@ -364,46 +303,6 @@ fn save_markdown_file(path: String, contents: String) -> Result<(), String> {
     std::fs::write(&path, contents).map_err(|error| error.to_string())
 }
 
-fn markdown_name_from_title(title: &str) -> Result<(String, String), String> {
-    let title = title.trim();
-    if title.is_empty() {
-        return Err("Escribe un título para la página".to_string());
-    }
-    if title.chars().count() > 120 {
-        return Err("El título no puede superar 120 caracteres".to_string());
-    }
-    if title.chars().any(|ch| {
-        ch.is_control() || matches!(ch, '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*')
-    }) {
-        return Err("El título contiene caracteres no permitidos".to_string());
-    }
-    let lowercase = title.to_ascii_lowercase();
-    let clean_title = [".markdown", ".mdown", ".mkd", ".md"]
-        .iter()
-        .find_map(|extension| {
-            lowercase
-                .strip_suffix(extension)
-                .map(|_| &title[..title.len() - extension.len()])
-        })
-        .unwrap_or(title)
-        .trim()
-        .trim_end_matches('.')
-        .trim();
-    if clean_title.is_empty() || matches!(clean_title, "." | "..") {
-        return Err("El título no produce un nombre de archivo válido".to_string());
-    }
-    let reserved = clean_title.to_ascii_uppercase();
-    let reserved = reserved.split('.').next().unwrap_or_default();
-    if matches!(reserved, "CON" | "PRN" | "AUX" | "NUL")
-        || (reserved.len() == 4
-            && (reserved.starts_with("COM") || reserved.starts_with("LPT"))
-            && reserved.as_bytes()[3].is_ascii_digit())
-    {
-        return Err("Ese nombre está reservado por el sistema".to_string());
-    }
-    Ok((clean_title.to_string(), format!("{clean_title}.md")))
-}
-
 fn create_markdown_at(folder: &Path, title: &str) -> Result<CreatedMarkdown, String> {
     if !folder.is_absolute() || !folder.is_dir() {
         return Err("Abre una carpeta válida antes de crear una página".to_string());
@@ -468,185 +367,26 @@ fn read_markdown_file(path: String, folder: Option<String>) -> Result<FilePayloa
     })
 }
 
-fn strip_frontmatter(contents: &str) -> String {
-    let mut lines = contents.lines();
-    if lines.next().map(str::trim_end) != Some("---") {
-        return contents.to_string();
-    }
-
-    let mut consumed = 1;
-    for line in lines {
-        consumed += 1;
-        if line.trim_end() == "---" {
-            return contents
-                .lines()
-                .skip(consumed)
-                .collect::<Vec<_>>()
-                .join("\n");
-        }
-    }
-    contents.to_string()
-}
-
-fn render_markdown(contents: &str) -> String {
-    render_markdown_source(&strip_frontmatter(contents))
-}
-
 fn render_markdown_with_context(contents: &str, file_path: &Path, folder: Option<&str>) -> String {
     let contents = strip_frontmatter(contents);
     let contents = resolve_wiki_links(&contents, file_path, folder);
-    render_markdown_source(&contents)
-}
-
-fn render_markdown_source(contents: &str) -> String {
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    options.insert(Options::ENABLE_TABLES);
-    options.insert(Options::ENABLE_TASKLISTS);
-    options.insert(Options::ENABLE_FOOTNOTES);
-    options.insert(Options::ENABLE_HEADING_ATTRIBUTES);
-
-    let parser = Parser::new_ext(contents, options);
-    let mut output = String::new();
-    html::push_html(&mut output, parser);
-    output
-}
-
-fn resolve_wiki_links(contents: &str, file_path: &Path, folder: Option<&str>) -> String {
-    let mut output = String::with_capacity(contents.len());
-    let mut in_fence = false;
-
-    for line in contents.split_inclusive('\n') {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            in_fence = !in_fence;
-            output.push_str(line);
-        } else if in_fence {
-            output.push_str(line);
-        } else {
-            output.push_str(&resolve_wiki_links_in_line(line, file_path, folder));
-        }
-    }
-
-    output
-}
-
-fn resolve_wiki_links_in_line(line: &str, file_path: &Path, folder: Option<&str>) -> String {
-    let mut output = String::with_capacity(line.len());
-    let mut rest = line;
-
-    while let Some(start) = rest.find("[[") {
-        output.push_str(&rest[..start]);
-        let after_start = &rest[start + 2..];
-        let Some(end) = after_start.find("]]") else {
-            output.push_str(&rest[start..]);
-            return output;
-        };
-
-        let expression = &after_start[..end];
-        let (target_with_anchor, explicit_label) = expression
-            .split_once('|')
-            .map(|(target, label)| (target.trim(), Some(label.trim())))
-            .unwrap_or_else(|| (expression.trim(), None));
-        let (target, anchor) = target_with_anchor
-            .split_once('#')
-            .map(|(target, anchor)| (target.trim(), Some(anchor.trim())))
-            .unwrap_or((target_with_anchor, None));
-
-        if let Some(path) = find_wiki_target(target, file_path, folder) {
-            let label = explicit_label
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-                .unwrap_or_else(|| markdown_title(&path));
-            let mut destination = path.to_string_lossy().replace('\\', "/");
-            if let Some(anchor) = anchor.filter(|value| !value.is_empty()) {
-                destination.push('#');
-                destination.push_str(anchor);
-            }
-            output.push('[');
-            output.push_str(&escape_markdown_label(&label));
-            output.push_str("](<");
-            output.push_str(&destination.replace('>', "%3E"));
-            output.push_str(">)");
-        } else {
-            output.push_str("[[");
-            output.push_str(expression);
-            output.push_str("]]");
-        }
-
-        rest = &after_start[end + 2..];
-    }
-
-    output.push_str(rest);
-    output
-}
-
-fn markdown_title(path: &Path) -> String {
-    if let Ok(contents) = std::fs::read_to_string(path) {
-        let body = strip_frontmatter(&contents);
-        if let Some(title) = body.lines().find_map(|line| {
-            let trimmed = line.trim_start();
-            let heading = trimmed.strip_prefix('#')?.trim_start_matches('#').trim();
-            (!heading.is_empty()).then(|| heading.trim_end_matches('#').trim().to_string())
-        }) {
-            return title;
-        }
-    }
-
-    path.file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("Documento")
-        .replace(['-', '_'], " ")
+    pliego_render::render_markdown_source(&contents)
 }
 
 fn find_wiki_target(target: &str, file_path: &Path, folder: Option<&str>) -> Option<PathBuf> {
-    if target.is_empty() || target.contains("://") {
-        return None;
-    }
-
-    let expanded = if target == "~" {
-        std::env::var_os("HOME").map(PathBuf::from)?
-    } else if let Some(relative) = target.strip_prefix("~/") {
-        std::env::var_os("HOME").map(PathBuf::from)?.join(relative)
-    } else {
-        PathBuf::from(target)
-    };
-
-    let mut bases = Vec::new();
-    if expanded.is_absolute() {
-        bases.push(expanded);
-    } else {
-        if let Some(parent) = file_path.parent() {
-            bases.push(parent.join(&expanded));
-        }
-        if let Some(folder) = folder.filter(|value| !value.is_empty()) {
-            bases.push(Path::new(folder).join(&expanded));
-        }
-        if let Some(home) = std::env::var_os("HOME") {
-            bases.push(PathBuf::from(home).join(&expanded));
-        }
-    }
-
-    for candidate in bases {
-        let variants = if candidate.extension().is_some() {
-            vec![candidate]
-        } else {
-            vec![candidate.clone(), candidate.with_extension("md")]
-        };
-        for variant in variants {
-            if variant.is_file() && is_markdown(&variant) {
-                return variant.canonicalize().ok().or(Some(variant));
-            }
-        }
-    }
-    None
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let path =
+        pliego_render::find_wiki_target(target, file_path, folder, home.as_deref(), Path::is_file)?;
+    path.canonicalize().ok().or(Some(path))
 }
 
-fn escape_markdown_label(label: &str) -> String {
-    label
-        .replace('\\', "\\\\")
-        .replace('[', "\\[")
-        .replace(']', "\\]")
+fn resolve_wiki_links(contents: &str, file_path: &Path, folder: Option<&str>) -> String {
+    pliego_render::resolve_wiki_links(contents, &|target| {
+        let path = find_wiki_target(target, file_path, folder)?;
+        let contents = std::fs::read_to_string(&path).ok();
+        let title = pliego_render::markdown_title(contents.as_deref(), &path);
+        Some((path, title))
+    })
 }
 
 #[cfg(test)]

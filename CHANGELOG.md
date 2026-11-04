@@ -4,6 +4,14 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 
 ## Unreleased
 
+### Versión web (PWA)
+
+- Pliego funciona en el navegador y se instala en iPhone, iPad y Android con «Añadir a pantalla de inicio». Funciona sin conexión y se actualiza solo.
+- La biblioteca web vive en IndexedDB: importa documentos desde Archivos o iCloud Drive, crea y edita páginas, usa el Inbox y exporta o restaura una copia de seguridad en `.zip`.
+- El renderizado de Markdown y de los `[[enlaces]]` se movió al crate `pliego-render`, que comparten la app de escritorio y la web (compilado a WebAssembly), para que el resultado sea idéntico.
+- Diseño para teléfono: el panel lateral pasa a ser un cajón que se cierra al abrir un documento.
+- Publicación automática en GitHub Pages desde `main`.
+
 ## [1.7.1] - 2026-09-30
 
 ### Actualizaciones Linux

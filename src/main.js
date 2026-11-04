@@ -7,10 +7,7 @@ import '@fontsource/raleway/400.css'
 import '@fontsource/raleway/400-italic.css'
 import '@fontsource/raleway/700.css'
 import '@fontsource/raleway/700-italic.css'
-import { invoke } from '@tauri-apps/api/core'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { listen } from '@tauri-apps/api/event'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { defaultLibrary, exportLibrary, getCurrentWindow, importLibrary, importPicked, invoke, isNative, listen, openDialog } from './platform/index.js'
 import hljs from 'highlight.js/lib/common'
 import TurndownService from 'turndown'
 import { gfm } from 'turndown-plugin-gfm'
@@ -110,10 +107,15 @@ let readingInteractionEpoch = 0
 let pendingUserScroll = false
 let pendingUserScrollTimer = null
 
+document.documentElement.dataset.platform = isNative ? 'desktop' : 'web'
+if (!isNative && import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => void navigator.serviceWorker.register('./sw.js').catch(() => {}))
+}
+
 document.querySelector('#app').innerHTML = `
   <div class="shell">
-    <div class="window-titlebar" data-tauri-drag-region>
-      <div class="window-title" data-tauri-drag-region><img src="/pliego-icon.png" alt="" /> Pliego</div>
+    <div class="window-titlebar desktop-only" data-tauri-drag-region>
+      <div class="window-title" data-tauri-drag-region><img src="./pliego-icon.png" alt="" /> Pliego</div>
       <div class="window-controls">
         <button id="windowMinimize" type="button" data-i18n-aria="minimize" aria-label="Minimizar">−</button>
         <button id="windowMaximize" type="button" data-i18n-aria="maximize" aria-label="Maximizar">□</button>
@@ -123,7 +125,7 @@ document.querySelector('#app').innerHTML = `
     <header class="topbar">
       <div class="brand">
         <button id="sidebarToggle" class="tool-button" type="button" data-i18n-aria="sidebarToggle" data-i18n-tooltip="sidebarTooltip" aria-label="Mostrar u ocultar panel" data-tooltip="Panel lateral">${icon('menu')}</button>
-        <button id="homeButton" class="brand-mark" type="button" data-i18n-aria="libraries" data-i18n-tooltip="libraries" aria-label="Bibliotecas" data-tooltip="Bibliotecas"><img src="/pliego-icon.png" alt="" /></button>
+        <button id="homeButton" class="brand-mark" type="button" data-i18n-aria="libraries" data-i18n-tooltip="libraries" aria-label="Bibliotecas" data-tooltip="Bibliotecas"><img src="./pliego-icon.png" alt="" /></button>
         <div class="brand-text">
           <p class="eyebrow" data-i18n="brandEyebrow">Biblioteca documental</p>
           <h1>Pliego</h1>
@@ -151,7 +153,7 @@ document.querySelector('#app').innerHTML = `
         <button id="focusModeToggle" class="tool-button" type="button" aria-keyshortcuts="Control+Shift+L Meta+Shift+L">◎</button>
         <button id="saveButton" class="ghost-button hidden" type="button">Guardar</button>
         <div class="tool-cluster">
-          <button id="codexToggle" class="tool-button ai-button" type="button" data-i18n-aria="codex" data-i18n-tooltip="assistant" aria-label="Codex AI" data-tooltip="Asistente Codex">${icon('ai')}</button>
+          <button id="codexToggle" class="tool-button ai-button desktop-only" type="button" data-i18n-aria="codex" data-i18n-tooltip="assistant" aria-label="Codex AI" data-tooltip="Asistente Codex">${icon('ai')}</button>
           <button id="favoriteToggle" class="tool-button" type="button" data-i18n-aria="favoriteAdd" aria-label="Añadir a favoritos" data-tooltip="Añadir a favoritos">${icon('star')}</button>
           <button id="annotationsToggle" class="tool-button" type="button" data-i18n-aria="annotationsTitle" data-i18n-tooltip="annotationsHint" aria-label="Resaltados y notas" data-tooltip="Resaltados y notas" aria-controls="annotationsPanel" aria-expanded="false">${icon('annotations')}</button>
           <button id="tocToggle" class="tool-button" type="button" data-i18n-aria="index" data-i18n-tooltip="index" aria-label="Indice" data-tooltip="Índice">${icon('toc')}</button>
@@ -348,7 +350,7 @@ document.querySelector('#app').innerHTML = `
           <button id="clearRecents" class="ghost-button" data-i18n="clearRecents" type="button">Limpiar recientes</button>
         </div>
 
-        <div class="setting-row inbox-setting-row">
+        <div class="setting-row inbox-setting-row desktop-only">
           <span data-i18n="globalCapture">Captura global</span>
           <div class="inbox-setting-control"><input id="inboxShortcutInput" class="setting-input" value="Ctrl+Alt+Space" data-i18n-aria="inboxShortcut" aria-label="Atajo global del Inbox" /><button id="inboxShortcutSave" class="ghost-button" data-i18n="saveShortcut" type="button">Guardar atajo</button></div>
         </div>
@@ -365,6 +367,10 @@ document.querySelector('#app').innerHTML = `
         <div id="updateSetting" class="setting-row update-setting hidden">
           <span id="updateStatus" role="status"></span>
           <button id="updateCheck" class="ghost-button" type="button"></button>
+        </div>
+        <div class="setting-row web-only">
+          <span data-i18n="backup">Copia de seguridad</span>
+          <div class="inbox-setting-control"><button id="backupExport" class="ghost-button" data-i18n="exportBackup" type="button">Exportar .zip</button><button id="backupImport" class="ghost-button" data-i18n="importBackup" type="button">Restaurar</button><input id="backupInput" type="file" accept=".zip,application/zip" hidden /></div>
         </div>
       </div>
     </div>
@@ -558,6 +564,18 @@ $('.window-titlebar').addEventListener('dblclick', (event) => {
 })
 
 $('#sidebarToggle').addEventListener('click', () => toggleSidebar())
+
+// En teléfono el panel lateral es un cajón: se cierra al elegir un documento o tocar fuera.
+const phoneLayout = window.matchMedia('(max-width: 560px)')
+function closeDrawerOnPhone() {
+  if (phoneLayout.matches && !sidebar.classList.contains('hidden')) toggleSidebar(false)
+}
+document.addEventListener('click', (event) => {
+  if (!phoneLayout.matches || sidebar.classList.contains('hidden')) return
+  const pickedDocument = event.target.closest?.('.tree-file, #recents [data-path]')
+  const outside = !sidebar.contains(event.target) && !event.target.closest?.('#sidebarToggle, .modal-backdrop, .palette-backdrop, dialog')
+  if (pickedDocument || outside) toggleSidebar(false)
+})
 $('#homeButton').addEventListener('click', openLibraryHome)
 $('#homeButton').addEventListener('pointerdown', () => libraryHome.classList.remove('hidden'))
 $('#libraryHomeClose').addEventListener('click', () => libraryHome.classList.add('hidden'))
@@ -608,6 +626,35 @@ function closeAnnotationsPanel() {
 $('#settingsButton').addEventListener('click', () => settingsModal.classList.remove('hidden'))
 $('#settingsClose').addEventListener('click', () => settingsModal.classList.add('hidden'))
 $('#showOnboarding').addEventListener('click', () => onboarding.start())
+$('#backupExport').addEventListener('click', async () => {
+  try {
+    const { blob, fileName } = await exportLibrary()
+    const file = new File([blob], fileName, { type: 'application/zip' })
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: fileName })
+      return
+    }
+    const url = URL.createObjectURL(blob)
+    const link = Object.assign(document.createElement('a'), { href: url, download: fileName })
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (error) {
+    if (error?.name !== 'AbortError') showMessage(`${uiText('No se pudo exportar la biblioteca: ', 'Could not export the library: ')}${formatError(error)}`)
+  }
+})
+$('#backupImport').addEventListener('click', () => $('#backupInput').click())
+$('#backupInput').addEventListener('change', async (event) => {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  try {
+    const count = await importLibrary(file)
+    await loadFolder(state.folder || defaultLibrary)
+    showMessage(uiText(`Se restauraron ${count} archivos.`, `Restored ${count} files.`))
+  } catch (error) {
+    showMessage(`${uiText('No se pudo restaurar la copia: ', 'Could not restore the backup: ')}${formatError(error)}`)
+  }
+})
 settingsModal.addEventListener('click', (event) => {
   if (event.target === settingsModal) {
     settingsModal.classList.add('hidden')
@@ -745,7 +792,7 @@ const TRANSLATIONS = {
     sidebarToggle: 'Mostrar u ocultar panel', sidebarTooltip: 'Panel lateral', openFile: 'Abrir archivo', openFolder: 'Abrir carpeta', newNote: 'Nueva página Markdown', newNoteTooltip: 'Nueva página · Ctrl+N', folderSearch: 'Buscar en carpeta · Ctrl+Shift+F', quickOpen: 'Apertura rápida', quickOpenTooltip: 'Apertura rápida · Ctrl+P', quickCapture: 'Captura rápida', quickCaptureTooltip: 'Captura rápida · Ctrl+Alt+Space', searchLabel: 'Buscar', annotationsTitle: 'Resaltados y notas', annotationsHint: 'Resaltados y notas · Ctrl+Mayús+A', annotationsEyebrow: 'LECTURA', annotationsClose: 'Cerrar notas',
     assistant: 'Asistente Codex', codex: 'Codex AI', favoriteAdd: 'Añadir a favoritos', favoriteRemove: 'Quitar de favoritos', index: 'Índice', settings: 'Configuración', openTabs: 'Archivos abiertos', searchPlaceholder: 'Títulos, texto, código…', read: 'Lectura', edit: 'Edición', save: 'Guardar', fileLabel: 'Archivo', noFile: 'Ningún archivo abierto', openHint: 'Abre o arrastra un archivo para visualizarlo.', folderLabel: 'Carpeta', folderHint: 'Abre una biblioteca para explorar sus documentos.', recentsLabel: 'Recientes', noRecents: 'Aún no hay archivos recientes.', referencesLabel: 'Referencias', referencesHint: 'Abre un Markdown para ver sus enlaces.', clearReading: 'Lectura clara', readyTitle: 'Listo para abrir tus documentos', readyLead: 'Visor ligero con bibliotecas, edición visual y navegación wiki.', dropzone: 'Arrastra aquí tu archivo .md o usa el botón de arriba.', tocSections: '0 secciones', closeIndex: 'Cerrar índice', tocEmpty: 'El índice aparecerá aquí.',
     codexChat: 'Chat con Codex', closeCodex: 'Cerrar Codex', localAssistant: 'Asistente local', disconnected: 'Desconectado', codexNotice: 'Abre un Markdown para iniciar la conversación.', codexInputPlaceholder: 'Pregunta sobre el Markdown…', modelAndEffort: 'Modelo y esfuerzo', model: 'Modelo', loading: 'Cargando…', effort: 'Esfuerzo', default: 'Predeterminado', context: 'Contexto', documentContext: 'Markdown + referencias', folderContext: 'Toda la carpeta', permissions: 'Permisos', readOnly: 'Solo lectura', writeMarkdown: 'Editar Markdown', allowWeb: 'Permitir búsqueda web en este mensaje', cancel: 'Cancelar', send: 'Enviar',
-    settingsTitle: 'Configuración', theme: 'Tema', light: 'Claro', dark: 'Oscuro', fontSize: 'Tamaño de letra', accentColor: 'Color de acento', gold: 'Dorado', teal: 'Verde azulado', coral: 'Coral', green: 'Verde', purple: 'Púrpura', readerFont: 'Fuente de lectura', readingLayout: 'Ajustes de lectura', readingWidth: 'Ancho de columna', readingWidthAuto: 'Automático', readingLineHeight: 'Interlineado', readingMargin: 'Márgenes', readingLayoutReset: 'Restablecer ajustes de lectura', readingMultiplier: '×', history: 'Historial', clearRecents: 'Limpiar recientes', globalCapture: 'Captura global', inboxShortcut: 'Atajo global del Inbox', saveShortcut: 'Guardar atajo', inboxFolder: 'Carpeta Inbox', notConfigured: 'Sin configurar', changeFolder: 'Cambiar carpeta', gettingStarted: 'Primeros pasos', showTutorial: 'Ver tutorial', highlightYellow: 'Resaltar amarillo', highlightGreen: 'Resaltar verde', highlightPink: 'Resaltar rosa', highlightBlue: 'Resaltar azul', removeHighlight: 'Quitar resaltado',
+    settingsTitle: 'Configuración', theme: 'Tema', light: 'Claro', dark: 'Oscuro', fontSize: 'Tamaño de letra', accentColor: 'Color de acento', gold: 'Dorado', teal: 'Verde azulado', coral: 'Coral', green: 'Verde', purple: 'Púrpura', readerFont: 'Fuente de lectura', readingLayout: 'Ajustes de lectura', readingWidth: 'Ancho de columna', readingWidthAuto: 'Automático', readingLineHeight: 'Interlineado', readingMargin: 'Márgenes', readingLayoutReset: 'Restablecer ajustes de lectura', readingMultiplier: '×', history: 'Historial', clearRecents: 'Limpiar recientes', globalCapture: 'Captura global', inboxShortcut: 'Atajo global del Inbox', saveShortcut: 'Guardar atajo', inboxFolder: 'Carpeta Inbox', notConfigured: 'Sin configurar', changeFolder: 'Cambiar carpeta', gettingStarted: 'Primeros pasos', showTutorial: 'Ver tutorial', highlightYellow: 'Resaltar amarillo', highlightGreen: 'Resaltar verde', highlightPink: 'Resaltar rosa', highlightBlue: 'Resaltar azul', removeHighlight: 'Quitar resaltado', backup: 'Copia de seguridad', exportBackup: 'Exportar .zip', importBackup: 'Restaurar',
     commandPalette: 'Paleta de comandos', paletteOpenPlaceholder: 'Abrir archivo…', paletteHint: 'Escribe para filtrar los documentos de la carpeta', typeToSearch: 'Escribe una palabra o frase.', noResults: 'No se encontraron resultados.', currentLibrary: 'Biblioteca actual', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Abrir Inbox', pendingCaptures: 'Capturas pendientes', systemPicker: 'Selector del sistema', changeLibrary: 'Cambiar biblioteca', folderNavigationShortcut: 'Ctrl+Shift+F', focusMode: 'Modo concentración', focusModeShortcut: 'Ctrl/Cmd+Shift+L', navigation: 'Navegación', openCodex: 'Abrir Codex', themeModes: 'Claro / oscuro', newPageLabel: 'NUEVA PÁGINA', createMarkdown: 'Crear Markdown', title: 'Título', titlePlaceholder: 'Idea sobre el proyecto', createdIn: 'Se creará en', createAndEdit: 'Crear y editar', captureClipboard: 'Capturar portapapeles', addFile: 'Añadir archivo', capture: 'Capturar', captures: 'Capturas', backlinks: 'Backlinks',
     quickCaptureLabel: 'CAPTURA RÁPIDA', quickCaptureTitle: 'Guarda lo que tienes en mente', quickCapturePlaceholder: 'Escribe o pega texto, una URL o una idea…', quickCaptureHint: 'Enter guarda · Shift+Enter crea una línea · Esc cierra', inboxWorkspace: 'ESPACIO DE CAPTURA', inboxTitle: 'Inbox', inboxHomeHint: 'Captura ahora, organiza después.', newCapture: 'Nueva captura', chooseInbox: 'Elige una carpeta para tu Inbox', chooseInboxHint: 'Las capturas serán archivos locales normales, siempre bajo tu control.', chooseFolder: 'Elegir carpeta', importFiles: 'Importar archivos', selectCapture: 'Selecciona una captura', selectCaptureHint: 'Aquí podrás revisar y procesar lo que guardaste.', collections: 'Colecciones', sortBy: 'Ordenar por', mostRecent: 'Más reciente', name: 'Nombre', color: 'Color', quickAccess: 'Acceso rápido', favorites: 'Favoritos', activity: 'Actividad', recent: 'Recientes', editLibrary: 'Editar biblioteca', optionalIcon: 'Icono opcional', saveChanges: 'Guardar cambios', openInFolder: 'Abrir en carpeta',
     noRecentHome: 'No hay archivos recientes.', noFavoritesHome: 'Aún no has añadido favoritos.', fileCount: 'archivos', unknownError: 'error desconocido', folderNoDocuments: 'La carpeta no tiene documentos compatibles.', noHeadings: 'El documento no tiene encabezados.', visualNoHeadings: 'Este documento no usa encabezados Markdown.', sections: 'secciones', words: 'palabras', lines: 'líneas', referencesMarkdown: 'Las referencias se calculan para Markdown.', noOutgoing: 'Sin enlaces salientes.', noBacklinks: 'Sin backlinks.', unresolvedLink: 'Enlace no resuelto', minimal: 'Mínimo', low: 'Bajo', medium: 'Medio', high: 'Alto', xhigh: 'Muy alto', max: 'Máximo', bold: 'Negrita', italic: 'Cursiva', strike: 'Tachado', inlineCode: 'Código inline', headingOne: 'Título 1', headingTwo: 'Título 2', headingThree: 'Título 3', paragraph: 'Párrafo normal', quote: 'Cita', bulletList: 'Lista', numberedList: 'Lista numerada', removeFormat: 'Quitar formato',
@@ -755,7 +802,7 @@ const TRANSLATIONS = {
     sidebarToggle: 'Show or hide sidebar', sidebarTooltip: 'Sidebar', openFile: 'Open file', openFolder: 'Open folder', newNote: 'New Markdown page', newNoteTooltip: 'New page · Ctrl+N', folderSearch: 'Search folder · Ctrl+Shift+F', quickOpen: 'Quick open', quickOpenTooltip: 'Quick open · Ctrl+P', quickCapture: 'Quick capture', quickCaptureTooltip: 'Quick capture · Ctrl+Alt+Space', searchLabel: 'Search', annotationsTitle: 'Highlights and notes', annotationsHint: 'Highlights and notes · Ctrl+Shift+A', annotationsEyebrow: 'READING', annotationsClose: 'Close notes',
     assistant: 'Codex assistant', codex: 'Codex AI', favoriteAdd: 'Add to favorites', favoriteRemove: 'Remove from favorites', index: 'Table of contents', settings: 'Settings', openTabs: 'Open files', searchPlaceholder: 'Titles, text, code…', read: 'Read', edit: 'Edit', save: 'Save', fileLabel: 'File', noFile: 'No file open', openHint: 'Open or drop a file to view it.', folderLabel: 'Folder', folderHint: 'Open a library to explore its documents.', recentsLabel: 'Recent', noRecents: 'No recent files yet.', referencesLabel: 'References', referencesHint: 'Open a Markdown file to see its links.', clearReading: 'Clear reading', readyTitle: 'Ready to open your documents', readyLead: 'A lightweight viewer with libraries, visual editing and wiki navigation.', dropzone: 'Drop your .md file here or use the button above.', tocSections: '0 sections', closeIndex: 'Close table of contents', tocEmpty: 'The table of contents will appear here.',
     codexChat: 'Codex chat', closeCodex: 'Close Codex', localAssistant: 'Local assistant', disconnected: 'Disconnected', codexNotice: 'Open a Markdown file to start the conversation.', codexInputPlaceholder: 'Ask about the Markdown…', modelAndEffort: 'Model and effort', model: 'Model', loading: 'Loading…', effort: 'Effort', default: 'Default', context: 'Context', documentContext: 'Markdown + references', folderContext: 'Entire folder', permissions: 'Permissions', readOnly: 'Read only', writeMarkdown: 'Edit Markdown', allowWeb: 'Allow web search in this message', cancel: 'Cancel', send: 'Send',
-    settingsTitle: 'Settings', theme: 'Theme', light: 'Light', dark: 'Dark', fontSize: 'Font size', accentColor: 'Accent color', gold: 'Gold', teal: 'Teal', coral: 'Coral', green: 'Green', purple: 'Purple', readerFont: 'Reading font', readingLayout: 'Reading layout', readingWidth: 'Column width', readingWidthAuto: 'Automatic', readingLineHeight: 'Line spacing', readingMargin: 'Margins', readingLayoutReset: 'Reset reading settings', readingMultiplier: '×', history: 'History', clearRecents: 'Clear recent files', globalCapture: 'Global capture', inboxShortcut: 'Inbox global shortcut', saveShortcut: 'Save shortcut', inboxFolder: 'Inbox folder', notConfigured: 'Not configured', changeFolder: 'Change folder', gettingStarted: 'Getting started', showTutorial: 'View tutorial', highlightYellow: 'Highlight yellow', highlightGreen: 'Highlight green', highlightPink: 'Highlight pink', highlightBlue: 'Highlight blue', removeHighlight: 'Remove highlight',
+    settingsTitle: 'Settings', theme: 'Theme', light: 'Light', dark: 'Dark', fontSize: 'Font size', accentColor: 'Accent color', gold: 'Gold', teal: 'Teal', coral: 'Coral', green: 'Green', purple: 'Purple', readerFont: 'Reading font', readingLayout: 'Reading layout', readingWidth: 'Column width', readingWidthAuto: 'Automatic', readingLineHeight: 'Line spacing', readingMargin: 'Margins', readingLayoutReset: 'Reset reading settings', readingMultiplier: '×', history: 'History', clearRecents: 'Clear recent files', globalCapture: 'Global capture', inboxShortcut: 'Inbox global shortcut', saveShortcut: 'Save shortcut', inboxFolder: 'Inbox folder', notConfigured: 'Not configured', changeFolder: 'Change folder', gettingStarted: 'Getting started', showTutorial: 'View tutorial', highlightYellow: 'Highlight yellow', highlightGreen: 'Highlight green', highlightPink: 'Highlight pink', highlightBlue: 'Highlight blue', removeHighlight: 'Remove highlight', backup: 'Backup', exportBackup: 'Export .zip', importBackup: 'Restore',
     commandPalette: 'Command palette', paletteOpenPlaceholder: 'Open file…', paletteHint: 'Type to filter the folder documents', typeToSearch: 'Type a word or phrase.', noResults: 'No results found.', currentLibrary: 'Current library', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Open Inbox', pendingCaptures: 'Pending captures', systemPicker: 'System picker', changeLibrary: 'Change library', folderNavigationShortcut: 'Ctrl+Shift+F', focusMode: 'Focus mode', focusModeShortcut: 'Ctrl/Cmd+Shift+L', navigation: 'Navigation', openCodex: 'Open Codex', themeModes: 'Light / dark', newPageLabel: 'NEW PAGE', createMarkdown: 'Create Markdown', title: 'Title', titlePlaceholder: 'Idea about the project', createdIn: 'Created in', createAndEdit: 'Create and edit', captureClipboard: 'Capture clipboard', addFile: 'Add file', capture: 'Capture', captures: 'Captures', backlinks: 'Backlinks',
     quickCaptureLabel: 'QUICK CAPTURE', quickCaptureTitle: 'Save what is on your mind', quickCapturePlaceholder: 'Type or paste text, a URL or an idea…', quickCaptureHint: 'Enter saves · Shift+Enter adds a line · Esc closes', inboxWorkspace: 'CAPTURE SPACE', inboxTitle: 'Inbox', inboxHomeHint: 'Capture now, organize later.', newCapture: 'New capture', chooseInbox: 'Choose a folder for your Inbox', chooseInboxHint: 'Captures are regular local files, always under your control.', chooseFolder: 'Choose folder', importFiles: 'Import files', selectCapture: 'Select a capture', selectCaptureHint: 'Review and process what you saved here.', collections: 'Collections', sortBy: 'Sort by', mostRecent: 'Most recent', name: 'Name', color: 'Color', quickAccess: 'Quick access', favorites: 'Favorites', activity: 'Activity', recent: 'Recent', editLibrary: 'Edit library', optionalIcon: 'Optional icon', saveChanges: 'Save changes', openInFolder: 'Open in folder',
     noRecentHome: 'No recent files.', noFavoritesHome: 'You have not added favorites yet.', fileCount: 'files', unknownError: 'unknown error', folderNoDocuments: 'The folder has no supported documents.', noHeadings: 'This document has no headings.', visualNoHeadings: 'This document does not use Markdown headings.', sections: 'sections', words: 'words', lines: 'lines', referencesMarkdown: 'References are calculated for Markdown.', noOutgoing: 'No outgoing links.', noBacklinks: 'No backlinks.', unresolvedLink: 'Unresolved link', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Very high', max: 'Maximum', bold: 'Bold', italic: 'Italic', strike: 'Strikethrough', inlineCode: 'Inline code', headingOne: 'Heading 1', headingTwo: 'Heading 2', headingThree: 'Heading 3', paragraph: 'Normal paragraph', quote: 'Quote', bulletList: 'Bullet list', numberedList: 'Numbered list', removeFormat: 'Remove formatting',
@@ -1136,7 +1183,7 @@ void refreshInbox()
 
 const readingLayout = createReadingLayout({ storage: localStorage, reader, getKind: () => state.documentKind, translate: (key) => t(key) })
 applyLanguage(state.language)
-updater = initializeUpdater({ language: () => state.language, hasUnsavedChanges: () => state.dirty })
+if (isNative) updater = initializeUpdater({ language: () => state.language, hasUnsavedChanges: () => state.dirty })
 
 // ---------- Codex App Server ----------
 
@@ -1566,7 +1613,9 @@ async function openMarkdown() {
       filters: [{ name: uiText('Documentos', 'Documents'), extensions: ['md', 'markdown', 'mdown', 'mkd', 'txt', 'csv', 'tsv', 'pdf', 'docx', 'epub', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'mmd', 'mermaid'] }],
     })
     if (typeof selected === 'string' && selected.length > 0) {
-      await loadFileFromPath(selected)
+      const path = await importPicked(selected)
+      if (path !== selected) await loadFolder(state.folder || defaultLibrary)
+      await loadFileFromPath(path)
       return
     }
     if (selected === null) {
@@ -1671,6 +1720,7 @@ function hideFileContextMenu() {
 }
 
 function showFileContextMenu(event, path) {
+  if (!isNative) return
   fileContextMenuPath = path
   fileContextMenu.classList.remove('hidden')
   const margin = 8
@@ -1722,7 +1772,7 @@ async function loadInitialFile() {
   } else if (plan.type === 'reading-session') {
     await restoreReadingSession(plan.session)
   } else {
-    const savedFolder = readSavedFolder()
+    const savedFolder = readSavedFolder() || defaultLibrary
     if (savedFolder) await loadFolder(savedFolder)
   }
 
@@ -1930,6 +1980,7 @@ function isCurrentLoad(generation) {
 async function loadVisualFile(path, kind, entry, generation, { restorePosition = null, interactionEpoch = readingInteractionEpoch } = {}) {
   const payload = await invoke('read_binary_document', { path })
   if (!isCurrentLoad(generation)) return
+  closeDrawerOnPhone()
   state.fileName = payload.fileName
   state.filePath = path
   state.documentKind = kind
@@ -2053,6 +2104,7 @@ function splitFrontmatter(markdown) {
 }
 
 function applyDocument(fileName, filePath, markdown, html) {
+  closeDrawerOnPhone()
   reader._visualCleanup?.()
   reader._visualCleanup = null
   cleanupMarkdownImages()

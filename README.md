@@ -61,6 +61,16 @@ Download and run the `.exe` or `.msi` installer from the latest release.
 
 Download the `.dmg` and drag Pliego into Applications. Pliego uses a free ad-hoc signature, so on first launch macOS will block it as an unidentified app. After trying to open it once, go to **System Settings → Privacy & Security → Open Anyway** and confirm.
 
+### iPhone, iPad, and Android (web app)
+
+Open [raullzn.github.io/pliego](https://raullzn.github.io/pliego/) in Safari, tap **Share → Add to Home Screen**, and launch Pliego from the new icon. The web app works offline and updates itself when it is online.
+
+The web app keeps its library inside the browser instead of reading folders on disk:
+
+- **Open document** copies files from Files or iCloud Drive into the *Importados* folder.
+- Use **Settings → Backup** to export the library as a `.zip` and restore it later. Clearing Safari's website data deletes the library.
+- The Codex assistant, global shortcuts, and "open in folder" are desktop-only.
+
 > Windows installers may display a SmartScreen warning until the project configures an Authenticode certificate. Linux packages require no additional configuration.
 
 ## Optional Codex integration
@@ -87,6 +97,15 @@ Local validation:
 ```bash
 npm run check
 ```
+
+Web app (needs the `wasm32-unknown-unknown` Rust target, for example `rustup target add wasm32-unknown-unknown`):
+
+```bash
+npm run build:web
+npm run preview:web
+```
+
+`npm run build:web` compiles the shared Markdown renderer (`crates/pliego-render`) to WebAssembly and writes the PWA to `dist-web/`. Pushes to `main` publish it to GitHub Pages.
 
 Packaging:
 
