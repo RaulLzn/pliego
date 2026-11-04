@@ -2196,3 +2196,113 @@ a {
     min-height: 40px;
   }
 }
+
+/* Lectura en pantallas estrechas: solo las tablas anchas se desplazan de lado,
+   nunca la columna de texto (en iPhone el texto "bailaba" al deslizar). */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.reader-wrap:has(> .reader.reading-layout-markdown) {
+  overflow-x: hidden;
+}
+
+@media (max-width: 720px) {
+  .reader table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .reader th,
+  .reader td {
+    min-width: 7em;
+  }
+}
+
+/* Zonas seguras del iPhone (Dynamic Island, muesca y horizontal) en la PWA */
+:root[data-platform='web'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 1000;
+  height: env(safe-area-inset-top);
+  background: var(--bg0);
+  pointer-events: none;
+}
+
+:root[data-platform='web'] .shell {
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+}
+
+:root[data-platform='web'] .library-home,
+:root[data-platform='web'] .inbox-view {
+  inset: 0;
+  padding-top: calc(env(safe-area-inset-top) + clamp(18px, 5vw, 64px));
+  padding-left: max(clamp(14px, 5vw, 64px), env(safe-area-inset-left));
+  padding-right: max(clamp(14px, 5vw, 64px), env(safe-area-inset-right));
+  padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
+}
+
+:root[data-platform='web'] .modal-backdrop {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+:root[data-platform='web'] .modal {
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);
+}
+
+:root[data-platform='web'] .palette-backdrop {
+  padding-top: calc(env(safe-area-inset-top) + min(10vh, 130px));
+}
+
+:root[data-platform='web'] .quick-capture-backdrop {
+  padding-top: calc(env(safe-area-inset-top) + min(12vh, 130px));
+}
+
+:root[data-platform='web'] .toc-overlay {
+  top: calc(env(safe-area-inset-top) + 92px);
+}
+
+:root[data-platform='web'] .annotations-panel {
+  top: calc(env(safe-area-inset-top) + 76px);
+}
+
+@media (max-width: 720px) {
+  :root[data-platform='web'] .shell {
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
+}
+
+/* Indicador del gesto atrás desde el borde (PWA instalada) */
+.edge-back-indicator {
+  position: fixed;
+  left: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border-light);
+  border-radius: 50%;
+  background: var(--bg2);
+  color: var(--text-secondary);
+  font-size: 1.6rem;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(calc(-44px + var(--edge-progress, 0) * 56px), -50%);
+}
+
+.edge-back-indicator.visible {
+  opacity: calc(.35 + var(--edge-progress, 0) * .65);
+}
+
+.edge-back-indicator.ready {
+  border-color: var(--accent);
+  color: var(--accent);
+}

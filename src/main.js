@@ -16,6 +16,7 @@ import { createOnboarding, onboardingCompleted } from './onboarding.js'
 import { createReadingSession, filterKnownMissingTabs, selectStartupPlan } from './reading-session.js'
 import { initializeUpdater } from './updates.js'
 import { createFocusMode } from './focus-mode.js'
+import { createBackNavigation, installEdgeSwipe } from './back-navigation.js'
 import { createReadingLayout } from './reading-layout.js'
 import { AnnotationsPanel, annotationDocumentKey } from './annotations.js'
 
@@ -880,6 +881,7 @@ function applyLanguage(language) {
 }
 
 let updater = null
+let backNavigation = null
 
 function libraries() {
   try {
@@ -1983,6 +1985,7 @@ async function loadVisualFile(path, kind, entry, generation, { restorePosition =
   const payload = await invoke('read_binary_document', { path })
   if (!isCurrentLoad(generation)) return
   closeDrawerOnPhone()
+  backNavigation?.documentOpened(path)
   state.fileName = payload.fileName
   state.filePath = path
   state.documentKind = kind
@@ -2107,6 +2110,7 @@ function splitFrontmatter(markdown) {
 
 function applyDocument(fileName, filePath, markdown, html) {
   closeDrawerOnPhone()
+  backNavigation?.documentOpened(filePath)
   reader._visualCleanup?.()
   reader._visualCleanup = null
   cleanupMarkdownImages()
@@ -3170,6 +3174,27 @@ referencesBox.addEventListener('click', (event) => {
   const target = event.target.closest('[data-path]')
   if (target) void loadFileFromPath(target.dataset.path)
 })
+
+// En la web el gesto atrás del sistema cierra capas y vuelve al documento anterior.
+const hiddenLayer = (element, close = () => element.classList.add('hidden')) => ({ isOpen: () => !element.classList.contains('hidden'), close })
+backNavigation = isNative ? null : createBackNavigation({
+  layers: [
+    hiddenLayer(commandPalette, closePalette),
+    hiddenLayer(quickCapture, closeQuickCapture),
+    hiddenLayer(newNoteModal, closeNewNoteDialog),
+    hiddenLayer(libraryEditor),
+    hiddenLayer(settingsModal),
+    hiddenLayer(inboxView),
+    hiddenLayer(tocOverlay),
+    hiddenLayer(annotationsPanel, closeAnnotationsPanel),
+    hiddenLayer(libraryHome),
+    { isOpen: () => phoneLayout.matches && !sidebar.classList.contains('hidden'), close: () => toggleSidebar(false) },
+    { isOpen: () => focusMode.isActive(), close: () => focusMode.exit() },
+  ],
+  openDocument: (path) => (path ? loadFileFromPath(path) : libraryHome.classList.remove('hidden')),
+})
+const installedApp = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+if (backNavigation && installedApp) installEdgeSwipe({ onBack: backNavigation.goBack })
 
 if (!onboardingCompleted()) window.setTimeout(() => onboarding.start(), 450)
 
