@@ -78,3 +78,35 @@
 .focus-mode-exit[hidden] {
   display: none;
 }
+
+:root[data-platform='web'] .focus-mode-exit {
+  top: calc(env(safe-area-inset-top) + 12px);
+}
+
+/* Inmersivo (pantallas táctiles): sin controles hasta tocar el documento */
+.shell.focus-immersive .focus-mode-exit {
+  min-height: 40px;
+  padding-inline: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+  transition: opacity .2s, transform .2s;
+}
+
+.shell.focus-immersive.focus-controls-visible .focus-mode-exit {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell.focus-immersive .focus-mode-exit {
+    transform: none;
+    transition: none;
+  }
+}
+
+.shell.focus-mode .reader:focus:not(:focus-visible),
+.shell.focus-immersive .reader:focus {
+  outline: none;
+}

@@ -458,6 +458,7 @@ const focusMode = createFocusMode({
   shell: $('.shell'),
   enterButton: $('#focusModeToggle'),
   reader,
+  immersive: () => window.matchMedia('(max-width: 560px), (pointer: coarse)').matches,
   getLabels: () => state.language === 'en'
     ? { enter: 'Enter focus mode', enterHint: 'Focus mode · Ctrl/Cmd+Shift+L', exit: 'Exit focus', exitHint: 'Exit focus mode · Esc or Ctrl/Cmd+Shift+L' }
     : { enter: 'Entrar en modo concentración', enterHint: 'Modo concentración · Ctrl/Cmd+Shift+L', exit: 'Salir de concentración', exitHint: 'Salir del modo concentración · Esc o Ctrl/Cmd+Shift+L' },
@@ -565,8 +566,9 @@ $('.window-titlebar').addEventListener('dblclick', (event) => {
 
 $('#sidebarToggle').addEventListener('click', () => toggleSidebar())
 
-// En teléfono el panel lateral es un cajón: se cierra al elegir un documento o tocar fuera.
-const phoneLayout = window.matchMedia('(max-width: 560px)')
+// En pantallas estrechas el panel lateral es un cajón: se cierra al elegir un documento o tocar fuera.
+// La web usa el cajón también en tableta; el escritorio solo en ventanas muy estrechas.
+const phoneLayout = window.matchMedia(isNative ? '(max-width: 560px)' : '(max-width: 1080px)')
 function closeDrawerOnPhone() {
   if (phoneLayout.matches && !sidebar.classList.contains('hidden')) toggleSidebar(false)
 }
