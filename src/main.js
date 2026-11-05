@@ -1612,14 +1612,19 @@ fileInput.addEventListener('change', async (event) => {
 
 async function openMarkdown() {
   try {
+    const extensions = ['md', 'markdown', 'mdown', 'mkd', 'txt', 'csv', 'tsv', 'pdf', 'docx', 'epub', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'mmd', 'mermaid']
+    // En la web se pueden traer varios archivos (un .md y sus imágenes) o una carpeta comprimida.
     const selected = await openDialog({
-      multiple: false,
-      filters: [{ name: uiText('Documentos', 'Documents'), extensions: ['md', 'markdown', 'mdown', 'mkd', 'txt', 'csv', 'tsv', 'pdf', 'docx', 'epub', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'mmd', 'mermaid'] }],
+      multiple: !isNative,
+      filters: [{ name: uiText('Documentos', 'Documents'), extensions: isNative ? extensions : [...extensions, 'zip'] }],
     })
-    if (typeof selected === 'string' && selected.length > 0) {
-      const path = await importPicked(selected)
-      if (path !== selected) await loadFolder(state.folder || defaultLibrary)
-      await loadFileFromPath(path)
+    const chosen = (Array.isArray(selected) ? selected : [selected]).filter((path) => typeof path === 'string' && path.length > 0)
+    if (chosen.length) {
+      const paths = []
+      for (const path of chosen) paths.push(await importPicked(path))
+      if (paths.some((path, index) => path !== chosen[index])) await loadFolder(state.folder || defaultLibrary)
+      const markdown = paths.find((path) => /\.(md|markdown|mdown|mkd|txt)$/i.test(path))
+      await loadFileFromPath(markdown || paths[0])
       return
     }
     if (selected === null) {

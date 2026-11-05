@@ -2306,3 +2306,20 @@ html {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* iOS: la página no se desplaza ni rebota; solo lo hacen el lector y los paneles */
+:root[data-platform='web'],
+:root[data-platform='web'] body {
+  overscroll-behavior: none;
+}
+
+:root[data-platform='web'] body {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+}
+
+:root[data-platform='web'] #app,
+:root[data-platform='web'] .shell {
+  height: 100dvh;
+}
