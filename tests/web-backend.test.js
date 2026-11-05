@@ -130,3 +130,28 @@ test('el WASM renderiza igual que el escritorio y resuelve [[enlaces]]', { skip:
   assert.match(payload.html, /<a href="\/Pliego\/notas\/destino.md">Destino real<\/a>/)
   assert.match(payload.html, /\[\[falta\]\]/)
 })
+
+test('un .zip se importa con su estructura y se abre su primer Markdown', async () => {
+  const { default: JSZip } = await import('jszip')
+  const zip = new JSZip()
+  zip.file('Articulo/articulo.md', '# Artículo\n\n![Figura](figs/uno.png)')
+  zip.file('Articulo/figs/uno.png', new Uint8Array([137, 80]))
+  zip.file('__MACOSX/Articulo/._articulo.md', 'basura')
+  const { fs, backend, picked } = setup()
+  picked.set('/.picked/1/Articulo.zip', { name: 'Articulo.zip', bytes: await zip.generateAsync({ type: 'uint8array' }) })
+  const path = await backend.importPicked('/.picked/1/Articulo.zip')
+  assert.equal(path, `${LIBRARY_ROOT}/Importados/Articulo/Articulo/articulo.md`)
+  assert.ok(await fs.stat(`${LIBRARY_ROOT}/Importados/Articulo/Articulo/figs/uno.png`))
+  assert.equal(await fs.stat(`${LIBRARY_ROOT}/Importados/Articulo/__MACOSX`), null)
+})
+
+test('una imagen que falta en su ruta se busca por nombre en la biblioteca', async () => {
+  const { fs, invoke } = setup()
+  await fs.writeBytes(`${LIBRARY_ROOT}/Importados/articulo.md`, '![x](figs/fig-marco.png)')
+  await fs.writeBytes(`${LIBRARY_ROOT}/Otros/fig-marco.png`, new Uint8Array([1]))
+  await fs.writeBytes(`${LIBRARY_ROOT}/Importados/figs/fig-marco.png`.replace('/figs', '/fotos/figs'), new Uint8Array([2]))
+  const payload = await invoke('read_binary_document', { path: `${LIBRARY_ROOT}/Importados/figs/fig-marco.png` })
+  assert.equal(payload.fileName, 'fig-marco.png')
+  assert.equal(payload.base64, btoa(String.fromCharCode(2)))
+  await assert.rejects(invoke('read_binary_document', { path: `${LIBRARY_ROOT}/no-existe.png` }))
+})

@@ -67,6 +67,26 @@ export function createWebBackend({ fs, renderer, settings, picked = new Map(), c
     return { name: baseName(path), bytes: await fs.readBytes(path) }
   }
 
+  // Imagen que no está en su ruta relativa (p. ej. se importó el .md sin su
+  // carpeta figs/): se usa el archivo de la biblioteca con el mismo nombre que
+  // comparta más carpetas finales con la ruta pedida.
+  async function findImageByName(path) {
+    const wanted = normalizePath(path).split('/').reverse()
+    let best = null
+    let bestScore = -1
+    for (const entry of await fs.all()) {
+      if (entry.dir || baseName(entry.path) !== wanted[0]) continue
+      const parts = entry.path.split('/').reverse()
+      let score = 0
+      while (score < parts.length && parts[score] === wanted[score]) score += 1
+      if (score > bestScore) {
+        best = entry.path
+        bestScore = score
+      }
+    }
+    return best
+  }
+
   async function markdownTitles() {
     const titles = new Map()
     for (const entry of await fs.all()) {
@@ -154,7 +174,8 @@ export function createWebBackend({ fs, renderer, settings, picked = new Map(), c
     async read_binary_document({ path }) {
       const kind = documentKind(path)
       if (!kind) throw 'Formato no soportado'
-      const { name, bytes } = await readSource(path)
+      const fallback = kind === 'image' && !picked.has(path) && !(await fs.stat(path)) ? await findImageByName(path) : null
+      const { name, bytes } = await readSource(fallback || path)
       if (bytes.length > MAX_VISUAL_FILE_BYTES) throw `El archivo ocupa ${megabytes(bytes.length)} MB; el límite seguro de visualización es 128 MB`
       return { fileName: name, kind, base64: bytesToBase64(bytes) }
     },
@@ -250,15 +271,37 @@ export function createWebBackend({ fs, renderer, settings, picked = new Map(), c
     return handler(args)
   }
 
-  // Copia a la biblioteca un archivo elegido en el selector del sistema.
+  // Copia a la biblioteca un archivo elegido en el selector del sistema y
+  // devuelve la ruta que conviene abrir. Un .zip se descomprime en su propia
+  // carpeta y se abre su primer documento Markdown.
   async function importPicked(path, folder = IMPORT_ROOT) {
     if (!picked.has(path)) return path
     const { name, bytes } = picked.get(path)
+    picked.delete(path)
     const [stem, extension] = splitName(name)
+    if (extension.toLowerCase() === 'zip') return importZip(bytes, await fs.uniquePath(folder, stem || 'archivo', ''))
     const destination = await fs.uniquePath(folder, stem || 'archivo', extension)
     await fs.writeBytes(destination, bytes)
-    picked.delete(path)
     return destination
+  }
+
+  async function importZip(bytes, root) {
+    const { default: JSZip } = await import('jszip')
+    const zip = await JSZip.loadAsync(bytes)
+    const written = []
+    for (const entry of Object.values(zip.files)) {
+      // Se descartan rutas que salgan de la carpeta y los metadatos de macOS.
+      const parts = entry.name.replaceAll('\\', '/').split('/').filter(Boolean)
+      if (entry.dir || !parts.length || parts.some((part) => part.startsWith('.') || part === '__MACOSX')) continue
+      const relative = parts.join('/')
+      const destination = joinPath(root, relative)
+      await fs.writeBytes(destination, await entry.async('uint8array'))
+      written.push(destination)
+    }
+    if (!written.length) throw 'El .zip no contiene documentos'
+    const depth = (item) => item.split('/').length
+    const documents = written.filter(isMarkdownPath).sort((a, b) => depth(a) - depth(b) || a.localeCompare(b))
+    return documents[0] || written.find(documentKind) || written[0]
   }
 
   return { invoke, importPicked, parentPath }

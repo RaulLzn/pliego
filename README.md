@@ -67,7 +67,7 @@ Open [raullzn.github.io/pliego](https://raullzn.github.io/pliego/) in Safari, ta
 
 The web app keeps its library inside the browser instead of reading folders on disk:
 
-- **Open document** copies files from Files or iCloud Drive into the *Importados* folder.
+- **Open document** copies files from Files or iCloud Drive into the *Importados* folder. Select a document together with its images, or a folder compressed as `.zip` (Files → long press → Compress) to keep its structure; images missing from their relative path are matched by file name.
 - Use **Settings → Backup** to export the library as a `.zip` and restore it later. Clearing Safari's website data deletes the library.
 - The Codex assistant, global shortcuts, and "open in folder" are desktop-only.
 
