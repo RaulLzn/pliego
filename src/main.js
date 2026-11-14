@@ -7,7 +7,7 @@ import '@fontsource/raleway/400.css'
 import '@fontsource/raleway/400-italic.css'
 import '@fontsource/raleway/700.css'
 import '@fontsource/raleway/700-italic.css'
-import { defaultLibrary, exportLibrary, getCurrentWindow, importLibrary, importPicked, invoke, isNative, listen, openDialog } from './platform/index.js'
+import { defaultLibrary, exportLibrary, getCurrentWindow, importLibrary, importPicked, invoke, isNative, listen, openDialog, takePickWarnings } from './platform/index.js'
 import hljs from 'highlight.js/lib/common'
 import TurndownService from 'turndown'
 import { gfm } from 'turndown-plugin-gfm'
@@ -810,6 +810,12 @@ const TRANSLATIONS = {
     quickCaptureLabel: 'QUICK CAPTURE', quickCaptureTitle: 'Save what is on your mind', quickCapturePlaceholder: 'Type or paste text, a URL or an idea…', quickCaptureHint: 'Enter saves · Shift+Enter adds a line · Esc closes', inboxWorkspace: 'CAPTURE SPACE', inboxTitle: 'Inbox', inboxHomeHint: 'Capture now, organize later.', newCapture: 'New capture', chooseInbox: 'Choose a folder for your Inbox', chooseInboxHint: 'Captures are regular local files, always under your control.', chooseFolder: 'Choose folder', importFiles: 'Import files', selectCapture: 'Select a capture', selectCaptureHint: 'Review and process what you saved here.', collections: 'Collections', sortBy: 'Sort by', mostRecent: 'Most recent', name: 'Name', color: 'Color', quickAccess: 'Quick access', favorites: 'Favorites', activity: 'Activity', recent: 'Recent', editLibrary: 'Edit library', optionalIcon: 'Optional icon', saveChanges: 'Save changes', openInFolder: 'Open in folder',
     noRecentHome: 'No recent files.', noFavoritesHome: 'You have not added favorites yet.', fileCount: 'files', unknownError: 'unknown error', folderNoDocuments: 'The folder has no supported documents.', noHeadings: 'This document has no headings.', visualNoHeadings: 'This document does not use Markdown headings.', sections: 'sections', words: 'words', lines: 'lines', referencesMarkdown: 'References are calculated for Markdown.', noOutgoing: 'No outgoing links.', noBacklinks: 'No backlinks.', unresolvedLink: 'Unresolved link', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Very high', max: 'Maximum', bold: 'Bold', italic: 'Italic', strike: 'Strikethrough', inlineCode: 'Inline code', headingOne: 'Heading 1', headingTwo: 'Heading 2', headingThree: 'Heading 3', paragraph: 'Normal paragraph', quote: 'Quote', bulletList: 'Bullet list', numberedList: 'Numbered list', removeFormat: 'Remove formatting',
   },
+}
+// En la web «Abrir carpeta» no puede abrir carpetas del dispositivo (Safari en iOS no lo permite):
+// muestra las carpetas de la biblioteca y, donde se puede, importa una.
+if (!isNative) {
+  TRANSLATIONS.es.openFolder = 'Carpetas de la biblioteca'
+  TRANSLATIONS.en.openFolder = 'Library folders'
 }
 
 function t(key, fallback = key) {
@@ -1619,29 +1625,50 @@ async function openMarkdown() {
       filters: [{ name: uiText('Documentos', 'Documents'), extensions: isNative ? extensions : [...extensions, 'zip'] }],
     })
     const chosen = (Array.isArray(selected) ? selected : [selected]).filter((path) => typeof path === 'string' && path.length > 0)
+    const warning = pickWarningMessage(takePickWarnings())
     if (chosen.length) {
       const paths = []
       for (const path of chosen) paths.push(await importPicked(path))
       if (paths.some((path, index) => path !== chosen[index])) await loadFolder(state.folder || defaultLibrary)
       const markdown = paths.find((path) => /\.(md|markdown|mdown|mkd|txt)$/i.test(path))
       await loadFileFromPath(markdown || paths[0])
+      if (warning) showMessage(warning)
       return
     }
-    if (selected === null) {
+    if (warning) showMessage(warning)
+    if (selected === null || !isNative) return
+  } catch (error) {
+    // En la web no hay alternativa: otro selector abierto tras un await lo
+    // bloquea iOS porque ya no cuenta como gesto del usuario.
+    if (!isNative) {
+      showMessage(`${uiText('No pude abrir el archivo: ', 'Could not open the file: ')}${formatError(error)}`)
       return
     }
-  } catch (_) {
-    // Fuera de Tauri: usar el input del navegador.
   }
   fileInput.click()
 }
 
+function pickWarningMessage(warnings) {
+  if (!warnings.length) return ''
+  const names = (reason) => warnings.filter((item) => item.reason === reason).map((item) => item.name).join(', ')
+  const unread = names('read')
+  const unsupported = names('type')
+  const parts = []
+  if (unread) parts.push(uiText(`No pude leer ${unread}. Si está en iCloud Drive, ábrelo antes en Archivos para que se descargue.`, `Could not read ${unread}. If it is in iCloud Drive, open it in Files first so it downloads.`))
+  if (unsupported) parts.push(uiText(`Tipo no admitido: ${unsupported}.`, `Unsupported type: ${unsupported}.`))
+  return parts.join(' ')
+}
+
 async function openFolder() {
   try {
-    const selected = await openDialog({ directory: true, multiple: false })
+    const options = { directory: true, multiple: false }
+    if (!isNative) Object.assign(options, { allowImport: true, title: uiText('Carpetas de la biblioteca', 'Library folders') })
+    const selected = await openDialog(options)
+    const warning = pickWarningMessage(takePickWarnings())
     if (typeof selected === 'string' && selected.length > 0) {
       if (await loadFolder(selected)) libraryHome.classList.add('hidden')
     }
+    if (warning) showMessage(warning)
   } catch (error) {
     showMessage(`${uiText('No pude abrir la carpeta: ', 'Could not open the folder: ')}${formatError(error)}`)
   }

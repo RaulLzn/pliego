@@ -64,30 +64,108 @@ export const defaultLibrary = LIBRARY_ROOT
 export const invoke = async (command, args) => (await ready()).invoke(command, args)
 export const importPicked = async (path) => (await ready()).importPicked(path)
 
-function pickFiles({ multiple = false, filters = [] }) {
+// iOS traduce cada extensión de `accept` a un tipo propio y deja en gris
+// los archivos cuya extensión no reconoce (.md, .mmd…). Allí no se filtra en
+// el selector y se valida la extensión al importar.
+const isIOS = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+// Safari en iOS no deja elegir carpetas; en el resto se usa webkitdirectory.
+export const canPickFolder = !isIOS && typeof HTMLInputElement !== 'undefined' && 'webkitdirectory' in HTMLInputElement.prototype
+
+let activeInput = null
+let pickWarnings = []
+
+// Archivos que no se pudieron traer en la última selección (p. ej. de iCloud
+// sin descargar o de un tipo no admitido). Se vacía al leerla.
+export function takePickWarnings() {
+  const warnings = pickWarnings
+  pickWarnings = []
+  return warnings
+}
+
+const extensionOf = (name) => {
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : ''
+}
+
+// Debe llamarse dentro del gesto del usuario: input.click() se ejecuta sin
+// ningún await previo. Devuelve los File elegidos, o null si se cancela.
+function chooseFiles({ multiple = false, directory = false, extensions = [] }) {
+  activeInput?.remove()
+  const input = document.createElement('input')
+  activeInput = input
+  input.type = 'file'
+  input.multiple = multiple || directory
+  if (directory) input.webkitdirectory = true
+  if (extensions.length && !isIOS && !directory) input.accept = extensions.map((extension) => `.${extension}`).join(',')
+  // WebKit puede descartar un input que no está en la página antes de
+  // disparar `change`; se mantiene en el DOM, oculto, mientras se elige.
+  input.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;inset-inline-start:-100px'
+  document.body.append(input)
   return new Promise((resolve) => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.multiple = multiple
-    input.accept = filters.flatMap((filter) => filter.extensions || []).map((extension) => `.${extension}`).join(',')
-    input.addEventListener('change', async () => {
-      const paths = []
-      for (const file of Array.from(input.files || [])) {
-        const path = `/.picked/${(pickCounter += 1)}/${file.name}`
-        picked.set(path, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })
-        paths.push(path)
-      }
-      resolve(paths.length ? (multiple ? paths : paths[0]) : null)
-    }, { once: true })
-    input.addEventListener('cancel', () => resolve(null), { once: true })
+    const finish = (files) => {
+      input.remove()
+      if (activeInput === input) activeInput = null
+      resolve(files)
+    }
+    input.addEventListener('change', () => finish(Array.from(input.files || [])), { once: true })
+    input.addEventListener('cancel', () => finish(null), { once: true })
     input.click()
   })
+}
+
+async function readFiles(files, extensions = []) {
+  const allowed = new Set(extensions.map((extension) => extension.toLowerCase()))
+  const read = []
+  for (const file of files) {
+    if (allowed.size && !allowed.has(extensionOf(file.name))) {
+      pickWarnings.push({ name: file.name, reason: 'type' })
+      continue
+    }
+    try {
+      read.push({ file, bytes: new Uint8Array(await file.arrayBuffer()) })
+    } catch (_) {
+      // Típico de iCloud Drive cuando el archivo aún no está descargado.
+      pickWarnings.push({ name: file.name, reason: 'read' })
+    }
+  }
+  return read
+}
+
+async function pickFiles({ multiple = false, filters = [] }) {
+  pickWarnings = []
+  const extensions = filters.flatMap((filter) => filter.extensions || [])
+  const files = await chooseFiles({ multiple, extensions })
+  if (!files) return null
+  const paths = []
+  for (const { file, bytes } of await readFiles(files, extensions)) {
+    const path = `/.picked/${(pickCounter += 1)}/${file.name}`
+    picked.set(path, { name: file.name, bytes })
+    paths.push(path)
+  }
+  if (!paths.length) return multiple ? [] : null
+  return multiple ? paths : paths[0]
+}
+
+// Importa a la biblioteca una carpeta del dispositivo y devuelve su ruta.
+async function importDeviceFolder() {
+  pickWarnings = []
+  const files = await chooseFiles({ directory: true })
+  if (!files || !files.length) return null
+  const entries = (await readFiles(files)).map(({ file, bytes }) => ({ relativePath: file.webkitRelativePath || file.name, bytes }))
+  if (!entries.length) throw 'No pude leer ningún archivo de la carpeta'
+  return (await ready()).importFolder(entries)
 }
 
 export async function openDialog(options = {}) {
   if (options.directory) {
     const folders = (await fs.all()).filter((entry) => entry.dir && entry.path.startsWith(LIBRARY_ROOT)).map((entry) => entry.path)
-    return chooseFolder({ title: options.title, folders: [LIBRARY_ROOT, ...new Set(folders)], mkdir: (path) => fs.mkdir(path) })
+    return chooseFolder({
+      title: options.title,
+      folders: [LIBRARY_ROOT, ...new Set(folders)],
+      mkdir: (path) => fs.mkdir(path),
+      importFolder: options.allowImport && canPickFolder ? importDeviceFolder : null,
+      zipHint: Boolean(options.allowImport && !canPickFolder),
+    })
   }
   return pickFiles(options)
 }

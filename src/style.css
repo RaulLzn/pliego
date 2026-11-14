@@ -1759,7 +1759,10 @@ a {
 .ai-button:hover .animated-icon { animation: ai-float .75s ease-in-out infinite alternate; }
 @keyframes ai-float { to { transform: translateY(-2px) rotate(7deg) scale(1.12); } }
 [data-tooltip]::after { content: attr(data-tooltip); pointer-events: none; position: absolute; z-index: 100; top: calc(100% + 9px); left: 50%; transform: translate(-50%, -4px); opacity: 0; padding: 6px 8px; border: 1px solid var(--border-light); border-radius: 6px; background: var(--bg2); box-shadow: 0 8px 24px rgba(0,0,0,.3); color: var(--text-primary); font-size: .7rem; white-space: nowrap; transition: opacity .15s, transform .15s; }
-[data-tooltip]:hover::after { opacity: 1; transform: translate(-50%, 0); }
+/* Solo con ratón: en pantallas táctiles :hover se queda pegado tras tocar. */
+@media (hover: hover) and (pointer: fine) {
+  [data-tooltip]:hover::after { opacity: 1; transform: translate(-50%, 0); }
+}
 .toolbar .search { flex: 1 1 260px; min-width: 120px; max-width: 430px; height: 40px; padding-inline: 10px; }
 .toolbar .search-label { display: none; }
 .toolbar .search input { padding: 7px 0; }
@@ -2021,6 +2024,20 @@ a {
 
 .web-folder-actions {
   margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.web-folder-hint {
+  margin: 12px 0 0;
+  color: var(--text-secondary, inherit);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.web-folder-error {
+  margin: 12px 0 0;
+  color: var(--danger, #d0573c);
+  font-size: 0.9rem;
 }
 
 /* Teléfono: el panel lateral pasa a ser un cajón sobre el lector */
