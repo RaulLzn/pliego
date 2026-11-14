@@ -10,3 +10,4 @@ export const openDialog = (...args) => platform.openDialog(...args)
 export const listen = (...args) => platform.listen(...args)
 export const getCurrentWindow = () => platform.getCurrentWindow()
 export const importPicked = (path) => platform.importPicked(path)
+export const takePickWarnings = () => platform.takePickWarnings?.() || []

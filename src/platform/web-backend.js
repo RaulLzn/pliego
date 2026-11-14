@@ -288,21 +288,48 @@ export function createWebBackend({ fs, renderer, settings, picked = new Map(), c
   async function importZip(bytes, root) {
     const { default: JSZip } = await import('jszip')
     const zip = await JSZip.loadAsync(bytes)
-    const written = []
+    const files = []
     for (const entry of Object.values(zip.files)) {
-      // Se descartan rutas que salgan de la carpeta y los metadatos de macOS.
-      const parts = entry.name.replaceAll('\\', '/').split('/').filter(Boolean)
-      if (entry.dir || !parts.length || parts.some((part) => part.startsWith('.') || part === '__MACOSX')) continue
-      const relative = parts.join('/')
-      const destination = joinPath(root, relative)
-      await fs.writeBytes(destination, await entry.async('uint8array'))
+      if (!entry.dir) files.push({ relativePath: entry.name, bytes: await entry.async('uint8array') })
+    }
+    try {
+      return await writeTree(files, root)
+    } catch (_) {
+      throw 'El .zip no contiene documentos'
+    }
+  }
+
+  // Escribe en `root` archivos con ruta relativa conservando sus carpetas y
+  // devuelve el documento que conviene abrir. Se descartan rutas que salgan
+  // de la carpeta, los ocultos y los metadatos de macOS.
+  async function writeTree(files, root) {
+    const written = []
+    for (const { relativePath, bytes } of files) {
+      const parts = String(relativePath).replaceAll('\\', '/').split('/').filter(Boolean)
+      if (!parts.length || parts.some((part) => part.startsWith('.') || part === '..' || part === '__MACOSX')) continue
+      const destination = joinPath(root, parts.join('/'))
+      await fs.writeBytes(destination, bytes)
       written.push(destination)
     }
-    if (!written.length) throw 'El .zip no contiene documentos'
+    if (!written.length) throw 'La carpeta no contiene documentos'
     const depth = (item) => item.split('/').length
     const documents = written.filter(isMarkdownPath).sort((a, b) => depth(a) - depth(b) || a.localeCompare(b))
     return documents[0] || written.find(documentKind) || written[0]
   }
 
-  return { invoke, importPicked, parentPath }
+  // Importa una carpeta elegida en el dispositivo (input webkitdirectory).
+  // Cada archivo trae su ruta relativa, que empieza por el nombre de la
+  // carpeta; se crea una carpeta nueva en la biblioteca y se devuelve su ruta.
+  async function importFolder(files, folder = LIBRARY_ROOT) {
+    const top = String(files[0]?.relativePath || '').replaceAll('\\', '/').split('/').filter(Boolean)[0] || 'Carpeta'
+    const root = await fs.uniquePath(folder, sanitizeStem(top) || 'Carpeta', '')
+    const inner = files.map(({ relativePath, bytes }) => {
+      const parts = String(relativePath).replaceAll('\\', '/').split('/').filter(Boolean)
+      return { relativePath: (parts.length > 1 && parts[0] === top ? parts.slice(1) : parts).join('/'), bytes }
+    })
+    await writeTree(inner, root)
+    return root
+  }
+
+  return { invoke, importPicked, importFolder, parentPath }
 }

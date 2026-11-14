@@ -11,6 +11,7 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 - El renderizado de Markdown y de los `[[enlaces]]` se movió al crate `pliego-render`, que comparten la app de escritorio y la web (compilado a WebAssembly), para que el resultado sea idéntico.
 - Diseño para teléfono: el panel lateral pasa a ser un cajón que se cierra al abrir un documento.
 - Publicación automática en GitHub Pages desde `main`.
+- Abrir documento en iPhone es fiable: avisa de los archivos que no se pueden leer (iCloud sin descargar, tipos no admitidos) y ya no deja en gris los `.md`. «Abrir carpeta» pasa a «Carpetas de la biblioteca» e importa carpetas del dispositivo donde el navegador lo permite; en iOS explica cómo traerlas en `.zip`.
 
 ## [1.7.1] - 2026-09-30
 

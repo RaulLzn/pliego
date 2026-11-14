@@ -155,3 +155,21 @@ test('una imagen que falta en su ruta se busca por nombre en la biblioteca', asy
   assert.equal(payload.base64, btoa(String.fromCharCode(2)))
   await assert.rejects(invoke('read_binary_document', { path: `${LIBRARY_ROOT}/no-existe.png` }))
 })
+
+test('importar una carpeta del dispositivo conserva su estructura y no pisa otra', async () => {
+  const { fs, backend } = setup()
+  await fs.mkdir(`${LIBRARY_ROOT}/Apuntes`)
+  const bytes = (text) => new TextEncoder().encode(text)
+  const root = await backend.importFolder([
+    { relativePath: 'Apuntes/tema1.md', bytes: bytes('uno') },
+    { relativePath: 'Apuntes/img/figura.png', bytes: new Uint8Array([1]) },
+    { relativePath: 'Apuntes/.DS_Store', bytes: bytes('x') },
+    { relativePath: 'Apuntes/../fuera.md', bytes: bytes('x') },
+  ])
+  assert.equal(root, `${LIBRARY_ROOT}/Apuntes-1`)
+  assert.equal(decode(await fs.readBytes(`${root}/tema1.md`)), 'uno')
+  assert.ok(await fs.stat(`${root}/img/figura.png`))
+  assert.equal(await fs.stat(`${root}/.DS_Store`), null)
+  assert.equal(await fs.stat(`${LIBRARY_ROOT}/fuera.md`), null)
+  await assert.rejects(backend.importFolder([{ relativePath: 'Vacia/.oculto', bytes: bytes('x') }]), /no contiene/)
+})

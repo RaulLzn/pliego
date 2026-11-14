@@ -9,7 +9,7 @@ function label(path) {
   return path.slice(LIBRARY_ROOT.length + 1)
 }
 
-export function chooseFolder({ title, folders, mkdir }) {
+export function chooseFolder({ title, folders, mkdir, importFolder = null, zipHint = false }) {
   return new Promise((resolve) => {
     const dialog = document.createElement('dialog')
     dialog.className = 'web-folder-dialog'
@@ -22,7 +22,9 @@ export function chooseFolder({ title, folders, mkdir }) {
           <input name="name" class="setting-input" autocomplete="off" />
           <button type="button" class="ghost-button" data-action="create"></button>
         </div>
-        <div class="web-folder-actions"><button value="cancel" class="ghost-button"></button></div>
+        <p class="web-folder-hint" hidden></p>
+        <p class="web-folder-error" role="alert" hidden></p>
+        <div class="web-folder-actions"><button type="button" class="ghost-button" data-action="import" hidden></button><button value="cancel" class="ghost-button"></button></div>
       </form>`
     dialog.querySelector('h2').textContent = title || text('Elegir carpeta', 'Choose folder')
     const input = dialog.querySelector('input')
@@ -59,6 +61,34 @@ export function chooseFolder({ title, folders, mkdir }) {
       }
       finish(await mkdir(joinPath(LIBRARY_ROOT, name)))
     })
+    if (zipHint) {
+      const hint = dialog.querySelector('.web-folder-hint')
+      hint.hidden = false
+      hint.textContent = text(
+        'Para traer una carpeta del iPhone, mantenla pulsada en Archivos, elige Comprimir y abre el .zip con Abrir documento.',
+        'To bring a folder from your iPhone, long-press it in Files, choose Compress and open the .zip with Open file.',
+      )
+    }
+    const importButton = dialog.querySelector('[data-action="import"]')
+    if (importFolder) {
+      importButton.hidden = false
+      importButton.textContent = text('Importar carpeta del dispositivo…', 'Import folder from device…')
+      // El selector se abre dentro del toque: importFolder llama a click() sin await previo.
+      importButton.addEventListener('click', async () => {
+        const error = dialog.querySelector('.web-folder-error')
+        error.hidden = true
+        importButton.disabled = true
+        try {
+          const path = await importFolder()
+          if (path) finish(path)
+        } catch (reason) {
+          error.textContent = String(reason?.message || reason)
+          error.hidden = false
+        } finally {
+          importButton.disabled = false
+        }
+      })
+    }
     input.addEventListener('input', () => input.setCustomValidity(''))
     dialog.addEventListener('close', () => finish(null))
     document.body.append(dialog)
