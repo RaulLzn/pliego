@@ -1,0 +1,19 @@
+/* Los resaltados de búsqueda del PDF se dibujan encima del canvas de cada página. */
+.pdf-page-slot {
+  position: relative;
+}
+
+.pdf-search-hit {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 2px;
+  background: var(--accent-glow);
+  mix-blend-mode: multiply;
+}
+
+.pdf-search-hit.active-match {
+  background: var(--accent);
+  opacity: 0.55;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
