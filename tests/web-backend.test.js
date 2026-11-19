@@ -59,7 +59,7 @@ test('crear, guardar y leer páginas', async () => {
   const { fs, invoke } = setup()
   await fs.mkdir(LIBRARY_ROOT)
   const created = await invoke('create_markdown_file', { folder: LIBRARY_ROOT, title: 'Ideas' })
-  assert.deepEqual(created, { fileName: 'Ideas.md', path: `${LIBRARY_ROOT}/Ideas.md` })
+  assert.deepEqual(created, { fileName: 'Ideas.md', path: `${LIBRARY_ROOT}/Ideas.md`, created: true })
   await assert.rejects(invoke('create_markdown_file', { folder: LIBRARY_ROOT, title: 'Ideas' }), /Ya existe/)
   await invoke('save_markdown_file', { path: created.path, contents: 'hola' })
   const payload = await invoke('read_markdown_file', { path: created.path, folder: LIBRARY_ROOT })

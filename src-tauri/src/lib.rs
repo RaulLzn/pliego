@@ -89,7 +89,26 @@ struct BinaryPayload {
 struct CreatedMarkdown {
     file_name: String,
     path: String,
+    /// `false` cuando la página ya existía y se pidió abrirla (`existing_ok`).
+    created: bool,
 }
+
+/// Opciones de una página nueva. Todas son opcionales para que las llamadas
+/// antiguas (solo carpeta y título) sigan funcionando igual.
+#[derive(Default)]
+struct NewPageOptions<'a> {
+    /// Subcarpeta relativa a la biblioteca (p. ej. «Diario»); se crea si falta.
+    subfolder: Option<&'a str>,
+    /// Contenido inicial (plantilla ya rellenada); si falta, solo el título.
+    contents: Option<&'a str>,
+    /// Si la página ya existe, se devuelve en vez de fallar (nota diaria).
+    existing_ok: bool,
+}
+
+/// Extensiones de imagen que se pueden guardar al pegar en el editor. Son las
+/// que el lector sabe mostrar; SVG queda fuera porque puede llevar scripts.
+const PASTE_IMAGE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "gif", "webp", "bmp"];
+const MAX_PASTED_IMAGE_BYTES: usize = 32 * 1024 * 1024;
 
 fn is_document(path: &Path) -> bool {
     document_kind(path).is_some()
@@ -389,36 +408,197 @@ fn write_file_atomically(path: &Path, contents: &[u8]) -> Result<(), String> {
     result
 }
 
-fn create_markdown_at(folder: &Path, title: &str) -> Result<CreatedMarkdown, String> {
+/// Valida una subcarpeta relativa: sin `..`, sin rutas absolutas, sin carpetas
+/// ocultas ni caracteres que Windows no admite. Devuelve sus componentes.
+fn subfolder_components(subfolder: &str) -> Result<Vec<String>, String> {
+    let parts: Vec<String> = subfolder
+        .split(['/', '\\'])
+        .filter(|part| !part.is_empty())
+        .map(str::to_string)
+        .collect();
+    if subfolder.starts_with(['/', '\\']) || parts.len() > 8 {
+        return Err("La subcarpeta no es válida".to_string());
+    }
+    for part in &parts {
+        let invalid = part.starts_with('.')
+            || part.trim() != part
+            || part
+                .chars()
+                .any(|ch| ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '|' | '?' | '*'));
+        if invalid {
+            return Err("La subcarpeta no es válida".to_string());
+        }
+    }
+    Ok(parts)
+}
+
+fn create_markdown_at(
+    folder: &Path,
+    title: &str,
+    options: NewPageOptions,
+) -> Result<CreatedMarkdown, String> {
     if !folder.is_absolute() || !folder.is_dir() {
         return Err("Abre una carpeta válida antes de crear una página".to_string());
     }
     let root = folder.canonicalize().map_err(|error| error.to_string())?;
     let (heading, file_name) = markdown_name_from_title(title)?;
-    let path = root.join(&file_name);
-    let mut file = std::fs::OpenOptions::new()
+    let mut target_dir = root.clone();
+    if let Some(subfolder) = options.subfolder {
+        for part in subfolder_components(subfolder)? {
+            target_dir.push(part);
+        }
+        std::fs::create_dir_all(&target_dir).map_err(|error| error.to_string())?;
+        // Un enlace simbólico dentro de la biblioteca no debe sacar la página fuera.
+        target_dir = target_dir
+            .canonicalize()
+            .map_err(|error| error.to_string())?;
+        if !target_dir.starts_with(&root) {
+            return Err("La subcarpeta no es válida".to_string());
+        }
+    }
+    let path = target_dir.join(&file_name);
+    let created = |created| CreatedMarkdown {
+        file_name: file_name.clone(),
+        path: path.to_string_lossy().into_owned(),
+        created,
+    };
+    let mut file = match std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&path)
-        .map_err(|error| {
-            if error.kind() == std::io::ErrorKind::AlreadyExists {
-                format!("Ya existe una página llamada {file_name}")
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return if options.existing_ok && path.is_file() {
+                Ok(created(false))
             } else {
-                error.to_string()
-            }
-        })?;
-    file.write_all(format!("# {heading}\n\n").as_bytes())
+                Err(format!("Ya existe una página llamada {file_name}"))
+            };
+        }
+        Err(error) => return Err(error.to_string()),
+    };
+    let contents = options
+        .contents
+        .map_or_else(|| format!("# {heading}\n\n"), str::to_string);
+    file.write_all(contents.as_bytes())
         .map_err(|error| error.to_string())?;
     file.sync_all().map_err(|error| error.to_string())?;
-    Ok(CreatedMarkdown {
-        file_name,
-        path: path.to_string_lossy().into_owned(),
-    })
+    Ok(created(true))
 }
 
 #[tauri::command]
-fn create_markdown_file(folder: String, title: String) -> Result<CreatedMarkdown, String> {
-    create_markdown_at(Path::new(&folder), &title)
+fn create_markdown_file(
+    folder: String,
+    title: String,
+    contents: Option<String>,
+    subfolder: Option<String>,
+    existing_ok: Option<bool>,
+) -> Result<CreatedMarkdown, String> {
+    create_markdown_at(
+        Path::new(&folder),
+        &title,
+        NewPageOptions {
+            subfolder: subfolder.as_deref(),
+            contents: contents.as_deref(),
+            existing_ok: existing_ok.unwrap_or(false),
+        },
+    )
+}
+
+/// Ruta sin `.` ni `..` resueltos a mano (el archivo aún no existe, así que no
+/// se puede canonicalizar). Devuelve `None` si intenta subir por encima de la raíz.
+fn lexical_normalize(path: &Path) -> Option<PathBuf> {
+    use std::path::Component;
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return None;
+                }
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    Some(normalized)
+}
+
+/// Guarda una imagen pegada en el editor. Nunca sobrescribe: si el nombre ya
+/// existe añade `-1`, `-2`… y devuelve la ruta final escrita.
+fn save_binary_at(path: &Path, bytes: &[u8], root: &Path) -> Result<PathBuf, String> {
+    let invalid = || "La ruta de la imagen no es válida".to_string();
+    if !path.is_absolute() || !root.is_absolute() {
+        return Err(invalid());
+    }
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    if !PASTE_IMAGE_EXTENSIONS.contains(&extension.as_str()) {
+        return Err("Solo se pueden guardar imágenes PNG, JPEG, GIF, WebP o BMP".to_string());
+    }
+    if bytes.len() > MAX_PASTED_IMAGE_BYTES {
+        return Err("La imagen supera el límite de 32 MB".to_string());
+    }
+    let lexical_root = lexical_normalize(root).ok_or_else(invalid)?;
+    let root = root
+        .canonicalize()
+        .map_err(|_| "La carpeta de la biblioteca no existe".to_string())?;
+    let path = lexical_normalize(path).ok_or_else(invalid)?;
+    let parent = path.parent().ok_or_else(invalid)?;
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty() && !value.starts_with('.'))
+        .ok_or_else(invalid)?;
+    // Primero la comprobación léxica, para no crear carpetas fuera de la biblioteca.
+    if !parent.starts_with(&lexical_root) && !parent.starts_with(&root) {
+        return Err(invalid());
+    }
+    std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    // Y después la real, por si un enlace simbólico apunta fuera.
+    let parent = parent.canonicalize().map_err(|error| error.to_string())?;
+    if !parent.starts_with(&root) {
+        return Err(invalid());
+    }
+    for index in 0..10_000 {
+        let name = if index == 0 {
+            format!("{stem}.{extension}")
+        } else {
+            format!("{stem}-{index}.{extension}")
+        };
+        let candidate = parent.join(name);
+        // Reserva el nombre con create_new para no pisar un archivo creado a la vez.
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(_) => {
+                return match write_file_atomically(&candidate, bytes) {
+                    Ok(()) => Ok(candidate),
+                    Err(error) => {
+                        let _ = std::fs::remove_file(&candidate);
+                        Err(error)
+                    }
+                };
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Err("No hay un nombre libre para la imagen".to_string())
+}
+
+#[tauri::command]
+fn save_binary_file(path: String, base64: String, root: String) -> Result<String, String> {
+    let bytes = BASE64
+        .decode(base64.as_bytes())
+        .map_err(|_| "La imagen no tiene un formato válido".to_string())?;
+    save_binary_at(Path::new(&path), &bytes, Path::new(&root))
+        .map(|path| path.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
@@ -604,18 +784,95 @@ mod tests {
     fn creates_a_new_markdown_page_without_overwriting() {
         let root = std::env::temp_dir().join(format!("pliego-create-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
-        let created = create_markdown_at(&root, "Idea del proyecto.md").unwrap();
+        let created =
+            create_markdown_at(&root, "Idea del proyecto.md", NewPageOptions::default()).unwrap();
         assert_eq!(created.file_name, "Idea del proyecto.md");
         assert_eq!(
             std::fs::read_to_string(&created.path).unwrap(),
             "# Idea del proyecto\n\n"
         );
-        assert!(create_markdown_at(&root, "Idea del proyecto").is_err());
+        assert!(create_markdown_at(&root, "Idea del proyecto", NewPageOptions::default()).is_err());
         assert_eq!(
             std::fs::read_to_string(&created.path).unwrap(),
             "# Idea del proyecto\n\n"
         );
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn creates_pages_with_contents_in_a_validated_subfolder() {
+        let root = std::env::temp_dir().join(format!("pliego-daily-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let options = || NewPageOptions {
+            subfolder: Some("Diario"),
+            contents: Some("# 2026-11-18\n\nHoy\n"),
+            existing_ok: true,
+        };
+        let created = create_markdown_at(&root, "2026-11-18", options()).unwrap();
+        assert!(created.created);
+        assert!(created.path.ends_with("2026-11-18.md"));
+        assert!(Path::new(&created.path)
+            .parent()
+            .unwrap()
+            .ends_with("Diario"));
+        assert_eq!(
+            std::fs::read_to_string(&created.path).unwrap(),
+            "# 2026-11-18\n\nHoy\n"
+        );
+        // La segunda vez solo se devuelve la existente, sin tocar su contenido.
+        std::fs::write(&created.path, "editada").unwrap();
+        let again = create_markdown_at(&root, "2026-11-18", options()).unwrap();
+        assert!(!again.created);
+        assert_eq!(again.path, created.path);
+        assert_eq!(std::fs::read_to_string(&created.path).unwrap(), "editada");
+        for bad in ["../fuera", "/abs", "a/../../b", ".oculta", "a:b", "x/./y"] {
+            let options = NewPageOptions {
+                subfolder: Some(bad),
+                ..NewPageOptions::default()
+            };
+            assert!(create_markdown_at(&root, "Nota", options).is_err(), "{bad}");
+        }
+        assert!(!root.parent().unwrap().join("fuera").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn saves_pasted_images_only_inside_the_library() {
+        let base = std::env::temp_dir().join(format!("pliego-paste-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("biblioteca");
+        std::fs::create_dir_all(root.join("notas")).unwrap();
+        let wanted = root.join("notas/assets/pegado-20261118-101500.png");
+        let first = save_binary_at(&wanted, b"png", &root).unwrap();
+        assert!(first.ends_with("notas/assets/pegado-20261118-101500.png"));
+        assert_eq!(std::fs::read(&first).unwrap(), b"png");
+        // Mismo nombre: no se pisa, se numera.
+        let second = save_binary_at(&wanted, b"otra", &root).unwrap();
+        assert!(second.ends_with("pegado-20261118-101500-1.png"));
+        assert_eq!(std::fs::read(&first).unwrap(), b"png");
+
+        let outside = root.join("notas/../../fuera/x.png");
+        assert!(save_binary_at(&outside, b"x", &root).is_err());
+        assert!(!base.join("fuera").exists());
+        assert!(save_binary_at(&base.join("otra/x.png"), b"x", &root).is_err());
+        assert!(save_binary_at(&root.join("notas/x.svg"), b"<svg/>", &root).is_err());
+        assert!(save_binary_at(&root.join("notas/x.md"), b"# x", &root).is_err());
+        assert!(save_binary_at(Path::new("relativa/x.png"), b"x", &root).is_err());
+        #[cfg(unix)]
+        {
+            std::fs::create_dir_all(base.join("secreta")).unwrap();
+            std::os::unix::fs::symlink(base.join("secreta"), root.join("enlace")).unwrap();
+            assert!(save_binary_at(&root.join("enlace/x.png"), b"x", &root).is_err());
+            assert_eq!(std::fs::read_dir(base.join("secreta")).unwrap().count(), 0);
+        }
+        assert!(save_binary_file(
+            wanted.to_string_lossy().into_owned(),
+            "no es base64!".to_string(),
+            root.to_string_lossy().into_owned()
+        )
+        .is_err());
+        std::fs::remove_dir_all(base).unwrap();
     }
 
     #[test]
@@ -705,6 +962,7 @@ pub fn run() {
             open_file_in_folder,
             save_markdown_file,
             create_markdown_file,
+            save_binary_file,
             inbox::inbox_get_config,
             inbox::inbox_set_folder,
             inbox::inbox_set_shortcut,
