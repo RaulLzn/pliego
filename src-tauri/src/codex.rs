@@ -7,7 +7,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const PROTOCOL_ADAPTER: &str = "codex-app-server-v2-0.144";
 
@@ -207,22 +207,30 @@ impl CodexManager {
 }
 
 fn find_codex() -> Result<PathBuf, String> {
-    if let Some(path) = std::env::var_os("PATH").and_then(|paths| {
-        std::env::split_paths(&paths)
-            .map(|dir| dir.join("codex"))
-            .find(|candidate| candidate.is_file())
-    }) {
-        return Ok(path);
+    // En Windows npm instala codex.cmd / codex.exe, nunca "codex" a secas.
+    let names: &[&str] = if cfg!(windows) {
+        &["codex.exe", "codex.cmd", "codex"]
+    } else {
+        &["codex"]
+    };
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).collect())
+        .unwrap_or_default();
+    // Una app abierta desde el Finder o el menú no hereda el PATH de la shell.
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        let home = PathBuf::from(home);
+        dirs.push(home.join(".npm-global/bin"));
+        dirs.push(home.join(".local/bin"));
     }
-    if let Some(home) = std::env::var_os("HOME") {
-        for relative in [".npm-global/bin/codex", ".local/bin/codex"] {
-            let candidate = PathBuf::from(&home).join(relative);
-            if candidate.is_file() {
-                return Ok(candidate);
-            }
-        }
+    if let Some(app_data) = std::env::var_os("APPDATA") {
+        dirs.push(PathBuf::from(app_data).join("npm"));
     }
-    Err("No encontré Codex CLI. Instala @openai/codex y ejecuta codex login".into())
+    dirs.push(PathBuf::from("/opt/homebrew/bin"));
+    dirs.push(PathBuf::from("/usr/local/bin"));
+    dirs.iter()
+        .flat_map(|dir| names.iter().map(move |name| dir.join(name)))
+        .find(|candidate| candidate.is_file())
+        .ok_or_else(|| "No encontré Codex CLI. Instala @openai/codex y ejecuta codex login".into())
 }
 
 fn spawn_stdout_reader(
@@ -553,9 +561,8 @@ pub struct ContextRequest {
     model: Option<String>,
 }
 
-#[tauri::command]
-pub fn codex_status(app: AppHandle, manager: State<CodexManager>) -> CodexStatus {
-    if let Err(error) = manager.ensure(&app) {
+fn codex_status_blocking(app: &AppHandle, manager: &CodexManager) -> CodexStatus {
+    if let Err(error) = manager.ensure(app) {
         let mut status = manager.status.lock().unwrap_or_else(|e| e.into_inner());
         status.message = error;
     }
@@ -566,19 +573,17 @@ pub fn codex_status(app: AppHandle, manager: State<CodexManager>) -> CodexStatus
         .clone()
 }
 
-#[tauri::command]
-pub fn codex_models(app: AppHandle, manager: State<CodexManager>) -> Result<Value, String> {
-    let runtime = manager.ensure(&app)?;
+fn codex_models_blocking(app: &AppHandle, manager: &CodexManager) -> Result<Value, String> {
+    let runtime = manager.ensure(app)?;
     runtime.send("model/list", json!({"limit":100,"includeHidden":false}))
 }
 
-#[tauri::command]
-pub fn codex_open_context(
-    app: AppHandle,
-    manager: State<CodexManager>,
+fn codex_open_context_blocking(
+    app: &AppHandle,
+    manager: &CodexManager,
     request: ContextRequest,
 ) -> Result<Value, String> {
-    let runtime = manager.ensure(&app)?;
+    let runtime = manager.ensure(app)?;
     let root = PathBuf::from(&request.path)
         .canonicalize()
         .map_err(|_| "El contexto no existe".to_string())?;
@@ -715,10 +720,10 @@ pub fn codex_set_writable(
     Ok(())
 }
 
-#[tauri::command]
-pub fn codex_send_turn(
-    app: AppHandle,
-    manager: State<CodexManager>,
+#[allow(clippy::too_many_arguments)]
+fn codex_send_turn_blocking(
+    app: &AppHandle,
+    manager: &CodexManager,
     thread_id: String,
     message: String,
     model: Option<String>,
@@ -728,7 +733,7 @@ pub fn codex_send_turn(
     if message.trim().is_empty() {
         return Err("Escribe un mensaje".into());
     }
-    let runtime = manager.ensure(&app)?;
+    let runtime = manager.ensure(app)?;
     let policy = if allow_web {
         "El usuario solicitó búsqueda web explícitamente; puedes usarla si aporta valor."
     } else {
@@ -745,8 +750,7 @@ pub fn codex_send_turn(
     )
 }
 
-#[tauri::command]
-pub fn codex_interrupt(manager: State<CodexManager>, thread_id: String) -> Result<(), String> {
+fn codex_interrupt_blocking(manager: &CodexManager, thread_id: String) -> Result<(), String> {
     let runtime = manager
         .runtime
         .lock()
@@ -766,6 +770,62 @@ pub fn codex_interrupt(manager: State<CodexManager>, thread_id: String) -> Resul
         json!({"threadId":thread_id,"turnId":turn_id}),
     )?;
     Ok(())
+}
+
+// Los comandos síncronos de Tauri corren en el hilo principal: esperar a Codex
+// (hasta 30 s por petición, o arrancar el proceso) congelaba la ventana.
+// Estos envoltorios async hacen el trabajo en un hilo bloqueante aparte.
+async fn run_blocking<T: Send + 'static>(
+    app: AppHandle,
+    job: impl FnOnce(&AppHandle, &CodexManager) -> T + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let manager = app.state::<CodexManager>();
+        job(&app, &manager)
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn codex_status(app: AppHandle) -> Result<CodexStatus, String> {
+    run_blocking(app, codex_status_blocking).await
+}
+
+#[tauri::command]
+pub async fn codex_models(app: AppHandle) -> Result<Value, String> {
+    run_blocking(app, codex_models_blocking).await?
+}
+
+#[tauri::command]
+pub async fn codex_open_context(app: AppHandle, request: ContextRequest) -> Result<Value, String> {
+    run_blocking(app, move |app, manager| {
+        codex_open_context_blocking(app, manager, request)
+    })
+    .await?
+}
+
+#[tauri::command]
+pub async fn codex_send_turn(
+    app: AppHandle,
+    thread_id: String,
+    message: String,
+    model: Option<String>,
+    effort: Option<String>,
+    allow_web: bool,
+) -> Result<Value, String> {
+    run_blocking(app, move |app, manager| {
+        codex_send_turn_blocking(app, manager, thread_id, message, model, effort, allow_web)
+    })
+    .await?
+}
+
+#[tauri::command]
+pub async fn codex_interrupt(app: AppHandle, thread_id: String) -> Result<(), String> {
+    run_blocking(app, move |_, manager| {
+        codex_interrupt_blocking(manager, thread_id)
+    })
+    .await?
 }
 
 #[tauri::command]

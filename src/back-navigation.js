@@ -5,7 +5,7 @@
 /**
  * @param {object} options
  * @param {{ isOpen: () => boolean, close: () => void }[]} options.layers Capas de arriba a abajo.
- * @param {(path: string | null) => void} options.openDocument Abre el documento anterior (null: ninguno).
+ * @param {(path: string | null) => unknown} options.openDocument Abre el documento anterior (null: ninguno); devolver false si no se pudo.
  */
 export function createBackNavigation({ layers, openDocument, history = window.history, target = window }) {
   // entries[i] describe la entrada i del historial: la 0 es la página inicial.
@@ -46,8 +46,18 @@ export function createBackNavigation({ layers, openDocument, history = window.hi
     }
     if (entry.kind === 'document') {
       restoring = true
+      const shownPath = currentPath
       currentPath = entry.previous
-      Promise.resolve(openDocument(entry.previous)).finally(() => { restoring = false })
+      Promise.resolve(openDocument(entry.previous))
+        .then((opened) => {
+          // Si no se pudo abrir (p. ej. cambios sin guardar), seguimos en el mismo
+          // documento: se repone la entrada para que el historial no se desfase.
+          if (opened === false) {
+            currentPath = shownPath
+            push(entry)
+          }
+        })
+        .finally(() => { restoring = false })
       return true
     }
     return false
