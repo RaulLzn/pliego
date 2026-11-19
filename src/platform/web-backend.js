@@ -18,7 +18,18 @@ const KINDS = {
 
 export const documentKind = (path) => KINDS[splitName(baseName(path))[1].toLowerCase()] || null
 const isMarkdownPath = (path) => ['markdown', 'text'].includes(documentKind(path))
-const decode = (bytes, limit = bytes.length) => new TextDecoder().decode(bytes.subarray(0, limit))
+// UTF-8 (sin BOM) y, si no es válido, Windows-1252 como en escritorio: el
+// decodificador por defecto cambiaba los bytes por U+FFFD y se perdían al guardar.
+const decode = (bytes, limit = bytes.length) => {
+  const slice = bytes.subarray(0, limit)
+  try {
+    // stream: una lectura parcial puede cortar un carácter al final sin que sea un error.
+    return new TextDecoder('utf-8', { fatal: true }).decode(slice, { stream: limit < bytes.length })
+  } catch (_) {
+    return new TextDecoder('windows-1252').decode(slice)
+  }
+}
+const NO_DOCUMENTS = 'La carpeta no contiene documentos'
 const megabytes = (size) => (size / 1048576).toFixed(1)
 
 export function bytesToBase64(bytes) {
@@ -294,8 +305,11 @@ export function createWebBackend({ fs, renderer, settings, picked = new Map(), c
     }
     try {
       return await writeTree(files, root)
-    } catch (_) {
-      throw 'El .zip no contiene documentos'
+    } catch (error) {
+      // Solo el caso «vacío» es culpa del .zip; un almacenamiento lleno u otro
+      // fallo debe llegar tal cual al usuario.
+      if (error === NO_DOCUMENTS) throw 'El .zip no contiene documentos'
+      throw error
     }
   }
 
@@ -311,7 +325,7 @@ export function createWebBackend({ fs, renderer, settings, picked = new Map(), c
       await fs.writeBytes(destination, bytes)
       written.push(destination)
     }
-    if (!written.length) throw 'La carpeta no contiene documentos'
+    if (!written.length) throw NO_DOCUMENTS
     const depth = (item) => item.split('/').length
     const documents = written.filter(isMarkdownPath).sort((a, b) => depth(a) - depth(b) || a.localeCompare(b))
     return documents[0] || written.find(documentKind) || written[0]

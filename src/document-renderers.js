@@ -293,6 +293,8 @@ export async function renderMermaidBlocks(root) {
       const { svg } = await mermaid.render(`mermaid-inline-${Date.now()}-${index}`, block.textContent)
       const shell = document.createElement('div')
       shell.className = 'diagram-document inline-diagram'
+      // Guardar la fuente permite volver a Markdown y re-renderizar con otro tema.
+      shell.dataset.mermaidSource = block.textContent
       shell.innerHTML = svg
       block.closest('pre').replaceWith(shell)
     } catch (error) {
@@ -318,16 +320,32 @@ function cancelledError() {
   return new DOMException(uiText('Carga cancelada', 'Load cancelled'), 'AbortError')
 }
 
-function sanitizeHtml(html) {
+const UNSAFE_ELEMENTS = 'script, style, iframe, frame, frameset, object, embed, applet, base, meta, link, form'
+const URL_ATTRIBUTES = new Set(['href', 'src', 'xlink:href', 'action', 'formaction', 'poster', 'background'])
+
+// Quita del HTML lo que puede ejecutar código: el Markdown deja pasar HTML crudo
+// y en la web no hay CSP que lo frene (un .md importado podría leer la biblioteca).
+export function sanitizeHtml(html, { keepStyle = false } = {}) {
   const template = document.createElement('template')
   template.innerHTML = html
-  template.content.querySelectorAll('script, style, iframe, object, embed, form').forEach((node) => node.remove())
+  template.content.querySelectorAll(keepStyle ? UNSAFE_ELEMENTS.replace('style, ', '') : UNSAFE_ELEMENTS).forEach((node) => node.remove())
   template.content.querySelectorAll('*').forEach((node) => {
     for (const attr of Array.from(node.attributes)) {
-      if (attr.name.toLowerCase().startsWith('on') || attr.name.toLowerCase() === 'style') node.removeAttribute(attr.name)
+      const name = attr.name.toLowerCase()
+      if (name.startsWith('on') || name === 'srcdoc' || (name === 'style' && !keepStyle)) {
+        node.removeAttribute(attr.name)
+      } else if (URL_ATTRIBUTES.has(name) && isScriptUrl(attr.value)) {
+        node.removeAttribute(attr.name)
+      }
     }
   })
   return template.innerHTML
+}
+
+function isScriptUrl(value) {
+  // Los navegadores ignoran espacios y caracteres de control dentro del esquema.
+  const compact = String(value).replace(/[\u0000-\u0020\u007f]/g, '').toLowerCase()
+  return compact.startsWith('javascript:') || compact.startsWith('vbscript:') || compact.startsWith('data:text/html')
 }
 
 function textWords(text) { return text.trim().split(/\s+/).filter(Boolean).length }

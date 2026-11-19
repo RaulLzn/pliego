@@ -96,16 +96,24 @@ fn is_document(path: &Path) -> bool {
 }
 
 fn build_tree(dir: &Path) -> Result<Vec<TreeNode>, String> {
+    build_tree_inner(dir, &mut HashSet::new())
+}
+
+/// Clave para no recorrer dos veces la misma carpeta (enlaces simbólicos en bucle).
+fn visit_key(dir: &Path) -> PathBuf {
+    dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf())
+}
+
+fn build_tree_inner(dir: &Path, visited: &mut HashSet<PathBuf>) -> Result<Vec<TreeNode>, String> {
     let mut nodes = Vec::new();
+    if !visited.insert(visit_key(dir)) {
+        return Ok(nodes);
+    }
     let entries = std::fs::read_dir(dir)
         .map_err(|error| format!("No se puede leer la carpeta '{}': {error}", dir.display()))?;
 
-    let mut items: Vec<_> = entries.collect::<Result<Vec<_>, _>>().map_err(|error| {
-        format!(
-            "No se puede enumerar la carpeta '{}': {error}",
-            dir.display()
-        )
-    })?;
+    // Una entrada ilegible no debe impedir mostrar el resto de la biblioteca.
+    let mut items: Vec<_> = entries.filter_map(Result::ok).collect();
     items.sort_by_key(|entry| {
         (
             !entry.path().is_dir(),
@@ -121,7 +129,10 @@ fn build_tree(dir: &Path) -> Result<Vec<TreeNode>, String> {
         }
 
         if path.is_dir() {
-            let children = build_tree(&path)?;
+            // Una subcarpeta sin permisos se omite en vez de tumbar todo el árbol.
+            let Ok(children) = build_tree_inner(&path, visited) else {
+                continue;
+            };
             if !children.is_empty() {
                 nodes.push(TreeNode {
                     name,
@@ -149,33 +160,39 @@ fn list_markdown_tree(dir: String) -> Result<Vec<TreeNode>, String> {
 }
 
 fn collect_document_index(dir: &Path, entries: &mut Vec<DocumentIndexEntry>) -> Result<(), String> {
+    collect_document_index_inner(dir, entries, &mut HashSet::new())
+}
+
+fn collect_document_index_inner(
+    dir: &Path,
+    entries: &mut Vec<DocumentIndexEntry>,
+    visited: &mut HashSet<PathBuf>,
+) -> Result<(), String> {
+    if !visited.insert(visit_key(dir)) {
+        return Ok(());
+    }
     let children = std::fs::read_dir(dir).map_err(|error| {
         format!(
             "No se puede indexar la carpeta '{}': {error}",
             dir.display()
         )
     })?;
-    for child in children {
-        let child = child.map_err(|error| {
-            format!(
-                "No se puede enumerar la carpeta '{}': {error}",
-                dir.display()
-            )
-        })?;
+    for child in children.filter_map(Result::ok) {
         let path = child.path();
         if child.file_name().to_string_lossy().starts_with('.') {
             continue;
         }
         if path.is_dir() {
-            collect_document_index(&path, entries)?;
+            // Igual que en el árbol: una subcarpeta ilegible se omite.
+            let _ = collect_document_index_inner(&path, entries, visited);
             continue;
         }
         let Some(kind) = document_kind(&path) else {
             continue;
         };
         let contents = if matches!(kind, "markdown" | "text" | "table" | "mermaid") {
-            read_text_prefix(&path, INDEX_TEXT_BYTES)
-                .map_err(|error| format!("No se pudo indexar '{}': {error}", path.display()))?
+            // Un enlace simbólico roto o sin permisos se indexa sin texto.
+            read_text_prefix(&path, INDEX_TEXT_BYTES).unwrap_or_default()
         } else {
             String::new()
         };
@@ -201,7 +218,34 @@ fn read_text_prefix(path: &Path, limit: u64) -> Result<String, String> {
     file.take(limit)
         .read_to_end(&mut bytes)
         .map_err(|error| error.to_string())?;
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
+    Ok(decode_text(&bytes))
+}
+
+/// Windows-1252 para 0x80–0x9F; el resto coincide con Latin-1.
+const CP1252_HIGH: [char; 32] = [
+    '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8D}', 'Ž', '\u{8F}',
+    '\u{90}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u{9D}', 'ž', 'Ÿ',
+];
+
+/// Decodifica texto quitando el BOM UTF-8. Si no es UTF-8 válido (archivos
+/// antiguos de Windows), se interpreta como Windows-1252 en vez de fallar o
+/// sustituir caracteres por U+FFFD, que se perderían al guardar.
+fn decode_text(bytes: &[u8]) -> String {
+    let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_string(),
+        // Secuencia cortada al final (lectura parcial del índice): sigue siendo UTF-8.
+        Err(error) if error.error_len().is_none() => {
+            String::from_utf8_lossy(&bytes[..error.valid_up_to()]).into_owned()
+        }
+        Err(_) => bytes
+            .iter()
+            .map(|&byte| match byte {
+                0x80..=0x9F => CP1252_HIGH[usize::from(byte - 0x80)],
+                _ => char::from(byte),
+            })
+            .collect(),
+    }
 }
 
 #[tauri::command]
@@ -300,7 +344,49 @@ fn open_file_in_folder(path: String) -> Result<(), String> {
 
 #[tauri::command]
 fn save_markdown_file(path: String, contents: String) -> Result<(), String> {
-    std::fs::write(&path, contents).map_err(|error| error.to_string())
+    write_file_atomically(Path::new(&path), contents.as_bytes())
+}
+
+/// Escribe en un temporal y lo renombra: un disco lleno o un cierre a mitad
+/// de escritura ya no deja el documento truncado.
+fn write_file_atomically(path: &Path, contents: &[u8]) -> Result<(), String> {
+    // Si el documento es un enlace simbólico, se escribe en su destino para no
+    // sustituir el enlace por un archivo normal.
+    let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let parent = target.parent().ok_or("El archivo no tiene carpeta padre")?;
+    let file_name = target
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or_default();
+    let temp = parent.join(format!(
+        ".{file_name}.pliego-{}-{nonce}.tmp",
+        std::process::id()
+    ));
+    let permissions = std::fs::metadata(&target)
+        .ok()
+        .map(|meta| meta.permissions());
+    let result = (|| {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+            .map_err(|error| error.to_string())?;
+        file.write_all(contents)
+            .map_err(|error| error.to_string())?;
+        file.sync_all().map_err(|error| error.to_string())?;
+        if let Some(permissions) = permissions {
+            std::fs::set_permissions(&temp, permissions).map_err(|error| error.to_string())?;
+        }
+        std::fs::rename(&temp, &target).map_err(|error| error.to_string())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    result
 }
 
 fn create_markdown_at(folder: &Path, title: &str) -> Result<CreatedMarkdown, String> {
@@ -352,7 +438,7 @@ fn read_markdown_file(path: String, folder: Option<String>) -> Result<FilePayloa
             size as f64 / 1_048_576.0
         ));
     }
-    let contents = std::fs::read_to_string(file_path).map_err(|error| error.to_string())?;
+    let contents = decode_text(&std::fs::read(file_path).map_err(|error| error.to_string())?);
     let file_name = file_path
         .file_name()
         .and_then(|value| value.to_str())
@@ -393,6 +479,43 @@ fn resolve_wiki_links(contents: &str, file_path: &Path, folder: Option<&str>) ->
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decodes_bom_and_legacy_encodings() {
+        assert_eq!(decode_text(b"\xEF\xBB\xBF# A"), "# A");
+        assert_eq!(decode_text(b"caf\xe9 \x93hola\x94"), "café “hola”");
+        // Un carácter UTF-8 cortado al final de una lectura parcial no cambia de codificación.
+        assert_eq!(decode_text("añ".as_bytes().split_at(2).0), "a");
+    }
+
+    #[test]
+    fn saves_atomically_and_keeps_tree_when_a_subfolder_fails() {
+        let root = std::env::temp_dir().join(format!("pliego-save-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        let file = root.join("nota.md");
+        std::fs::write(&file, "antes").unwrap();
+        write_file_atomically(&file, "después".as_bytes()).unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "después");
+        std::fs::write(root.join("sub/otra.md"), "x").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&root, root.join("sub/bucle")).unwrap();
+        let tree = build_tree(&root).unwrap();
+        assert_eq!(tree.iter().filter(|node| node.name == "nota.md").count(), 1);
+        let leftovers = std::fs::read_dir(&root)
+            .unwrap()
+            .filter(|entry| {
+                entry
+                    .as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .ends_with(".tmp")
+            })
+            .count();
+        assert_eq!(leftovers, 0);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn resolves_existing_wiki_links_from_open_folder() {
