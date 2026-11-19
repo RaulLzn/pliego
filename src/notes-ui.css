@@ -1,0 +1,4 @@
+/* Selector de plantilla del diálogo «Nueva página»: mismo aspecto que el campo de título. */
+.new-note-template[hidden] { display: none; }
+.new-note-template select { width: 100%; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; outline: none; background: var(--bg2); color: var(--text-primary); font: .92rem var(--ui-font); }
+.new-note-template select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
