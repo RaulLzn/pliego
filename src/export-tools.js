@@ -1,5 +1,6 @@
 // Exportar resaltados a Markdown e imprimir / guardar como PDF el documento del lector.
 import './export-tools.css'
+import { askConfirm } from './confirm-dialog.js'
 import { buildHighlightsMarkdown, collectExportEntries, exportFileStem } from './highlights-export.js'
 
 function joinPath(folder, name) {
@@ -63,13 +64,13 @@ export function createHighlightsExporter({ panel, controller, invoke, getState, 
     try {
       let path = ''
       if (documentExists(target)) {
-        path = window.confirm(text('exportHighlightsOverwrite').replace('{name}', `${stem}.md`)) ? target : (await createUnique(folder, stem)).path
+        path = (await askConfirm(text('exportHighlightsOverwrite').replace('{name}', `${stem}.md`))) ? target : (await createUnique(folder, stem)).path
       } else {
         try {
           path = (await invoke('create_markdown_file', { folder, title: stem })).path
         } catch (error) {
           if (!/existe|exists/i.test(String(error))) throw error
-          path = window.confirm(text('exportHighlightsOverwrite').replace('{name}', `${stem}.md`)) ? target : (await createUnique(folder, stem)).path
+          path = (await askConfirm(text('exportHighlightsOverwrite').replace('{name}', `${stem}.md`))) ? target : (await createUnique(folder, stem)).path
         }
       }
       await invoke('save_markdown_file', { path, contents: markdown })

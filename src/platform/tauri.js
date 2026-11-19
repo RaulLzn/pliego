@@ -1,6 +1,6 @@
 // Adaptador de escritorio: delega en Tauri sin cambios.
 export { invoke } from '@tauri-apps/api/core'
-export { open as openDialog } from '@tauri-apps/plugin-dialog'
+export { open as openDialog, confirm as confirmDialog } from '@tauri-apps/plugin-dialog'
 export { listen } from '@tauri-apps/api/event'
 export { getCurrentWindow } from '@tauri-apps/api/window'
 

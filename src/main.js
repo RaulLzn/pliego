@@ -7,7 +7,7 @@ import '@fontsource/raleway/400.css'
 import '@fontsource/raleway/400-italic.css'
 import '@fontsource/raleway/700.css'
 import '@fontsource/raleway/700-italic.css'
-import { defaultLibrary, exportLibrary, getCurrentWindow, importLibrary, importPicked, invoke, isNative, listen, openDialog, takePickWarnings } from './platform/index.js'
+import { confirmDialog, defaultLibrary, exportLibrary, getCurrentWindow, importLibrary, importPicked, invoke, isNative, listen, openDialog, takePickWarnings } from './platform/index.js'
 import hljs from 'highlight.js/lib/common'
 import TurndownService from 'turndown'
 import { gfm } from 'turndown-plugin-gfm'
@@ -25,9 +25,17 @@ import { createDailyNote, createTemplatePicker } from './notes-ui.js'
 import { createHighlightsExporter, printReader } from './export-tools.js'
 import { createFileTags, filterByTag, parseTagQuery, tagsForEntry } from './tags.js'
 import { createLinkGraph } from './link-graph.js'
+import { askConfirm, setConfirmImplementation } from './confirm-dialog.js'
 import { createDocumentSearch } from './document-search.js'
 import { createReadingProgress } from './reading-progress.js'
 import { quickFold, searchSnippet } from './search-text.js'
+
+setConfirmImplementation((message) => confirmDialog(message, {
+  title: 'Pliego',
+  kind: 'warning',
+  okLabel: uiText('Aceptar', 'OK'),
+  cancelLabel: uiText('Cancelar', 'Cancel'),
+}))
 
 const THEME_KEY = 'pliego-theme'
 const RECENTS_KEY = 'pliego-recents'
@@ -1234,7 +1242,7 @@ async function runInboxAction(action) {
     } else if (action === 'archive') {
       await invoke('inbox_archive', { name: item.name })
     } else if (action === 'delete') {
-      if (!window.confirm(inboxText('', `¿Eliminar “${item.name}”?`, `Delete “${item.name}”?`))) return
+      if (!(await askConfirm(inboxText('', `¿Eliminar “${item.name}”?`, `Delete “${item.name}”?`)))) return
       await invoke('inbox_delete', { name: item.name })
     }
     selectedInboxPath = ''
@@ -1700,7 +1708,7 @@ const recoveryDrafts = createRecoveryDrafts({
 const imagePaste = installImagePaste({ reader, dropzone, getState: () => state, getRoot: () => state.folder, invoke, notify: showMessage, text: t, formatError, mimeType: imageMimeType })
 
 async function recoverDraft(markdown) {
-  if (state.dirty && !window.confirm(t('draftReplaceConfirm'))) return
+  if (state.dirty && !(await askConfirm(t('draftReplaceConfirm')))) return
   const { fileName, filePath, loadGeneration } = state
   let html
   try {
@@ -3051,16 +3059,16 @@ void (async () => {
   await loadInitialFile()
 })()
 
-function confirmDiscardUnsaved() {
+async function confirmDiscardUnsaved() {
   if (!state.dirty) return true
-  return window.confirm(uiText(
+  return askConfirm(uiText(
     `«${state.fileName || 'sin título'}» tiene cambios sin guardar. ¿Cerrar y descartarlos?`,
     `“${state.fileName || 'untitled'}” has unsaved changes. Close and discard them?`,
   ))
 }
 
-void appWindow.onCloseRequested((event) => {
-  if (!confirmDiscardUnsaved()) {
+void appWindow.onCloseRequested(async (event) => {
+  if (!(await confirmDiscardUnsaved())) {
     event.preventDefault()
     return
   }
