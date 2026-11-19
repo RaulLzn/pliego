@@ -117,6 +117,23 @@ function buildPrintRoot(reader, { showUrls }) {
   return root
 }
 
+// Los diagramas Mermaid llevan los colores del tema con el que se pintaron: en
+// tema oscuro salían como cajas negras sobre el papel. Se repintan en claro.
+async function renderDiagramsForPaper(root) {
+  const shells = Array.from(root?.querySelectorAll?.('.inline-diagram[data-mermaid-source]') || [])
+  if (!shells.length || document.documentElement.dataset.theme !== 'dark') return
+  try {
+    const { default: mermaid } = await import('mermaid')
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' })
+    for (let index = 0; index < shells.length; index += 1) {
+      const { svg } = await mermaid.render(`mermaid-print-${Date.now()}-${index}`, shells[index].dataset.mermaidSource)
+      shells[index].innerHTML = svg
+    }
+  } catch (_) {
+    // Si no se puede repintar, se imprime tal cual.
+  }
+}
+
 export async function printReader({ reader, fileName, showUrls = false, showMessage, text }) {
   if (!reader || reader.classList.contains('empty') || !reader.textContent.trim() && !reader.querySelector('img, svg, canvas')) {
     showMessage(text('printEmpty'))
@@ -126,7 +143,8 @@ export async function printReader({ reader, fileName, showUrls = false, showMess
     showMessage(text('printUnsupported'))
     return
   }
-  buildPrintRoot(reader, { showUrls })
+  const root = buildPrintRoot(reader, { showUrls })
+  await renderDiagramsForPaper(root)
   // El título del documento es el nombre que proponen los diálogos «Guardar como PDF».
   const previousTitle = document.title
   document.title = String(fileName || previousTitle).replace(/\.[^.]+$/, '') || previousTitle
