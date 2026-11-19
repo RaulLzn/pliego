@@ -171,6 +171,7 @@ export async function openDialog(options = {}) {
 }
 
 export const listen = async () => () => {}
+export const confirmDialog = async (message) => window.confirm(message)
 
 export function getCurrentWindow() {
   const noop = async () => {}

@@ -1,0 +1,27 @@
+/* Tiempo de lectura y % leído: segunda línea discreta bajo palabras/líneas. */
+.reading-progress-meta {
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* El nombre se recorta con puntos suspensivos y el % queda siempre visible. */
+.recent-link:has(.recent-progress) {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.recent-link .recent-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-link .recent-progress {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.78em;
+  font-variant-numeric: tabular-nums;
+}

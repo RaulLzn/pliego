@@ -1,3 +1,4 @@
+import { askConfirm } from './confirm-dialog.js'
 export const ANNOTATIONS_VERSION = 1
 export const ANNOTATIONS_KEY_PREFIX = 'pliego-annotations-v1:'
 
@@ -489,7 +490,7 @@ export class AnnotationsPanel {
       return
     }
     if (action === 'delete') {
-      if (typeof globalThis.confirm === 'function' && !globalThis.confirm(this.t('deleteConfirm'))) return
+      if (!(await askConfirm(this.t('deleteConfirm')))) return
       const next = { ...this.data, annotations: this.data.annotations.filter((item) => item.id !== button.dataset.noteId) }
       if (await this.persist(next)) {
         this.drafts.delete(annotationDraftKey(this.documentKey, `note:${button.dataset.noteId}`))

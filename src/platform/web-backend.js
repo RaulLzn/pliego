@@ -60,6 +60,32 @@ function timestamp(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
 }
 
+// Misma regla que subfolder_components en lib.rs: relativa, sin `..`, sin
+// carpetas ocultas ni caracteres que Windows no admite.
+export function subfolderParts(subfolder) {
+  const text = String(subfolder || '')
+  const parts = text.split(/[\\/]/).filter(Boolean)
+  const invalid = /^[\\/]/.test(text) || parts.length > 8 || parts.some((part) => part.startsWith('.') || part.trim() !== part || /[\u0000-\u001f<>:"|?*]/.test(part))
+  if (invalid) throw 'La subcarpeta no es válida'
+  return parts
+}
+
+// Como PASTE_IMAGE_EXTENSIONS en lib.rs: las que el lector muestra, sin SVG.
+const PASTE_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'])
+const MAX_PASTED_IMAGE_BYTES = 32 * 1024 * 1024
+
+function base64ToBytes(value) {
+  let binary
+  try {
+    binary = atob(String(value || ''))
+  } catch (_) {
+    throw 'La imagen no tiene un formato válido'
+  }
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return bytes
+}
+
 function safeItemName(name) {
   const trimmed = String(name || '').trim()
   if (!trimmed || trimmed === '.' || trimmed === '..') throw 'Nombre de elemento inválido'
@@ -195,14 +221,33 @@ export function createWebBackend({ fs, renderer, settings, picked = new Map(), c
       await fs.writeBytes(path, contents)
     },
 
-    async create_markdown_file({ folder, title }) {
+    async create_markdown_file({ folder, title, contents, subfolder, existingOk = false }) {
       if (!(await fs.stat(folder))?.dir) throw 'Abre una carpeta válida antes de crear una página'
       const { heading, fileName } = renderer.pageName(title)
-      const path = joinPath(folder, fileName)
-      await fs.writeBytes(path, `# ${heading}\n\n`, { createNew: true }).catch(() => {
+      const directory = subfolder ? joinPath(folder, ...subfolderParts(subfolder)) : folder
+      const path = joinPath(directory, fileName)
+      const existing = await fs.stat(path)
+      if (existing) {
+        if (existingOk && !existing.dir) return { fileName, path, created: false }
+        throw `Ya existe una página llamada ${fileName}`
+      }
+      await fs.writeBytes(path, typeof contents === 'string' ? contents : `# ${heading}\n\n`, { createNew: true }).catch(() => {
         throw `Ya existe una página llamada ${fileName}`
       })
-      return { fileName, path }
+      return { fileName, path, created: true }
+    },
+
+    // Imagen pegada en el editor: nunca sobrescribe y devuelve la ruta final.
+    async save_binary_file({ path, base64, root }) {
+      const target = normalizePath(path)
+      const libraryRoot = normalizePath(root || '/')
+      const [stem, extension] = splitName(baseName(target))
+      if (!PASTE_IMAGE_EXTENSIONS.has(extension.toLowerCase())) throw 'Solo se pueden guardar imágenes PNG, JPEG, GIF, WebP o BMP'
+      if (!stem || stem.startsWith('.') || !root || !isInside(target, libraryRoot) || !(await fs.stat(libraryRoot))?.dir) throw 'La ruta de la imagen no es válida'
+      const bytes = base64ToBytes(base64)
+      if (bytes.length > MAX_PASTED_IMAGE_BYTES) throw 'La imagen supera el límite de 32 MB'
+      const destination = await fs.uniquePath(parentPath(target), stem, extension)
+      return fs.writeBytes(destination, bytes, { createNew: true })
     },
 
     open_file_in_folder: () => {

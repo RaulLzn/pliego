@@ -7,7 +7,7 @@ import '@fontsource/raleway/400.css'
 import '@fontsource/raleway/400-italic.css'
 import '@fontsource/raleway/700.css'
 import '@fontsource/raleway/700-italic.css'
-import { defaultLibrary, exportLibrary, getCurrentWindow, importLibrary, importPicked, invoke, isNative, listen, openDialog, takePickWarnings } from './platform/index.js'
+import { confirmDialog, defaultLibrary, exportLibrary, getCurrentWindow, importLibrary, importPicked, invoke, isNative, listen, openDialog, takePickWarnings } from './platform/index.js'
 import hljs from 'highlight.js/lib/common'
 import TurndownService from 'turndown'
 import { gfm } from 'turndown-plugin-gfm'
@@ -19,6 +19,23 @@ import { createFocusMode } from './focus-mode.js'
 import { createBackNavigation, installEdgeSwipe } from './back-navigation.js'
 import { createReadingLayout } from './reading-layout.js'
 import { AnnotationsPanel, annotationDocumentKey } from './annotations.js'
+import { createRecoveryDrafts } from './recovery-drafts.js'
+import { installImagePaste } from './pasted-images.js'
+import { createDailyNote, createTemplatePicker } from './notes-ui.js'
+import { createHighlightsExporter, printReader } from './export-tools.js'
+import { createFileTags, filterByTag, parseTagQuery, tagsForEntry } from './tags.js'
+import { createLinkGraph } from './link-graph.js'
+import { askConfirm, setConfirmImplementation } from './confirm-dialog.js'
+import { createDocumentSearch } from './document-search.js'
+import { createReadingProgress } from './reading-progress.js'
+import { quickFold, searchSnippet } from './search-text.js'
+
+setConfirmImplementation((message) => confirmDialog(message, {
+  title: 'Pliego',
+  kind: 'warning',
+  okLabel: uiText('Aceptar', 'OK'),
+  cancelLabel: uiText('Cancelar', 'Cancel'),
+}))
 
 const THEME_KEY = 'pliego-theme'
 const RECENTS_KEY = 'pliego-recents'
@@ -74,8 +91,6 @@ const state = {
   markdown: '',
   frontmatter: '',
   html: '',
-  matches: [],
-  activeMatchIndex: -1,
   mode: 'read',
   folder: '',
   scale: 1,
@@ -490,6 +505,17 @@ const annotationsPanelController = new AnnotationsPanel({
   reader,
   language: () => state.language,
 })
+const documentSearch = createDocumentSearch({ reader, stats: searchStats, clearHighlights, onChange: () => annotationsPanelController.refresh() })
+const readingProgress = createReadingProgress({
+  reader,
+  readerWrap,
+  anchor: metaInfo,
+  recentsBox,
+  readingSession,
+  getDocument: () => ({ path: state.filePath, kind: state.documentKind, loading: state.documentLoading, markdown: state.markdown, visualInfo: state.visualInfo }),
+  getLanguage: () => state.language,
+  labels: () => ({ minutes: t('readingTimeMinutes'), read: t('readingPercentRead'), page: t('readingPageOf') }),
+})
 const commandPalette = $('#commandPalette')
 const paletteInput = $('#paletteInput')
 const paletteResults = $('#paletteResults')
@@ -796,8 +822,11 @@ const TRANSLATIONS = {
     sidebarToggle: 'Mostrar u ocultar panel', sidebarTooltip: 'Panel lateral', openFile: 'Abrir archivo', openFolder: 'Abrir carpeta', newNote: 'Nueva página Markdown', newNoteTooltip: 'Nueva página · Ctrl+N', folderSearch: 'Buscar en carpeta · Ctrl+Shift+F', quickOpen: 'Apertura rápida', quickOpenTooltip: 'Apertura rápida · Ctrl+P', quickCapture: 'Captura rápida', quickCaptureTooltip: 'Captura rápida · Ctrl+Alt+Space', searchLabel: 'Buscar', annotationsTitle: 'Resaltados y notas', annotationsHint: 'Resaltados y notas · Ctrl+Mayús+A', annotationsEyebrow: 'LECTURA', annotationsClose: 'Cerrar notas',
     assistant: 'Asistente Codex', codex: 'Codex AI', favoriteAdd: 'Añadir a favoritos', favoriteRemove: 'Quitar de favoritos', index: 'Índice', settings: 'Configuración', openTabs: 'Archivos abiertos', searchPlaceholder: 'Títulos, texto, código…', read: 'Lectura', edit: 'Edición', save: 'Guardar', fileLabel: 'Archivo', noFile: 'Ningún archivo abierto', openHint: 'Abre o arrastra un archivo para visualizarlo.', folderLabel: 'Carpeta', folderHint: 'Abre una biblioteca para explorar sus documentos.', recentsLabel: 'Recientes', noRecents: 'Aún no hay archivos recientes.', referencesLabel: 'Referencias', referencesHint: 'Abre un Markdown para ver sus enlaces.', clearReading: 'Lectura clara', readyTitle: 'Listo para abrir tus documentos', readyLead: 'Visor ligero con bibliotecas, edición visual y navegación wiki.', dropzone: 'Arrastra aquí tu archivo .md o usa el botón de arriba.', tocSections: '0 secciones', closeIndex: 'Cerrar índice', tocEmpty: 'El índice aparecerá aquí.',
     codexChat: 'Chat con Codex', closeCodex: 'Cerrar Codex', localAssistant: 'Asistente local', disconnected: 'Desconectado', codexNotice: 'Abre un Markdown para iniciar la conversación.', codexInputPlaceholder: 'Pregunta sobre el Markdown…', modelAndEffort: 'Modelo y esfuerzo', model: 'Modelo', loading: 'Cargando…', effort: 'Esfuerzo', default: 'Predeterminado', context: 'Contexto', documentContext: 'Markdown + referencias', folderContext: 'Toda la carpeta', permissions: 'Permisos', readOnly: 'Solo lectura', writeMarkdown: 'Editar Markdown', allowWeb: 'Permitir búsqueda web en este mensaje', cancel: 'Cancelar', send: 'Enviar',
+    readingTimeMinutes: '{n} min', readingPercentRead: '{percent} leído', readingPageOf: 'Página {page} de {total}',
     settingsTitle: 'Configuración', theme: 'Tema', light: 'Claro', dark: 'Oscuro', fontSize: 'Tamaño de letra', accentColor: 'Color de acento', gold: 'Dorado', teal: 'Verde azulado', coral: 'Coral', green: 'Verde', purple: 'Púrpura', readerFont: 'Fuente de lectura', readingLayout: 'Ajustes de lectura', readingWidth: 'Ancho de columna', readingWidthAuto: 'Automático', readingLineHeight: 'Interlineado', readingMargin: 'Márgenes', readingLayoutReset: 'Restablecer ajustes de lectura', readingMultiplier: '×', history: 'Historial', clearRecents: 'Limpiar recientes', globalCapture: 'Captura global', inboxShortcut: 'Atajo global del Inbox', saveShortcut: 'Guardar atajo', inboxFolder: 'Carpeta Inbox', notConfigured: 'Sin configurar', changeFolder: 'Cambiar carpeta', gettingStarted: 'Primeros pasos', showTutorial: 'Ver tutorial', highlightYellow: 'Resaltar amarillo', highlightGreen: 'Resaltar verde', highlightPink: 'Resaltar rosa', highlightBlue: 'Resaltar azul', removeHighlight: 'Quitar resaltado', backup: 'Copia de seguridad', exportBackup: 'Exportar .zip', importBackup: 'Restaurar',
+    noteTemplate: 'Plantilla', blankTemplate: 'En blanco', dailyNote: 'Nota diaria', dailyNoteShortcut: 'Ctrl/Cmd+Shift+D', dailyNeedsFolder: 'Abre una carpeta antes de crear la nota diaria.', dailyUnsaved: 'Guarda los cambios actuales antes de abrir la nota diaria.', dailyFailed: 'No pude abrir la nota diaria', draftFound: 'Hay un borrador sin guardar de {date}.', draftRecover: 'Recuperar', draftDiscard: 'Descartar', draftReplaceConfirm: '¿Sustituir los cambios actuales por el borrador?', pasteImageNoPath: 'Este documento no tiene ruta en disco: ábrelo desde la biblioteca para pegar imágenes.', pasteImageUnsupported: 'Solo se pueden pegar imágenes PNG, JPEG, GIF, WebP o BMP.', pasteImageFailed: 'No pude guardar la imagen',
     commandPalette: 'Paleta de comandos', paletteOpenPlaceholder: 'Abrir archivo…', paletteHint: 'Escribe para filtrar los documentos de la carpeta', typeToSearch: 'Escribe una palabra o frase.', noResults: 'No se encontraron resultados.', currentLibrary: 'Biblioteca actual', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Abrir Inbox', pendingCaptures: 'Capturas pendientes', systemPicker: 'Selector del sistema', changeLibrary: 'Cambiar biblioteca', folderNavigationShortcut: 'Ctrl+Shift+F', focusMode: 'Modo concentración', focusModeShortcut: 'Ctrl/Cmd+Shift+L', navigation: 'Navegación', openCodex: 'Abrir Codex', themeModes: 'Claro / oscuro', changeTheme: 'Cambiar tema', newPageLabel: 'NUEVA PÁGINA', createMarkdown: 'Crear Markdown', title: 'Título', titlePlaceholder: 'Idea sobre el proyecto', createdIn: 'Se creará en', createAndEdit: 'Crear y editar', captureClipboard: 'Capturar portapapeles', addFile: 'Añadir archivo', capture: 'Capturar', captures: 'Capturas', backlinks: 'Backlinks',
+    exportHighlights: 'Exportar resaltados', exportHighlightsHint: 'Guarda un resumen .md junto al documento', exportHighlightsMarkdownOnly: 'Abre un documento Markdown para exportar sus resaltados.', exportHighlightsUnsaved: 'Guarda los cambios del documento antes de exportar.', exportHighlightsEmpty: 'Este documento no tiene resaltados ni notas que exportar.', exportHighlightsOverwrite: 'Ya existe «{name}». ¿Sobrescribirlo? Cancelar guarda una copia con sufijo.', exportHighlightsDone: 'Resumen exportado', exportHighlightsFailed: 'No se pudo exportar el resumen', printDocument: 'Imprimir / PDF', printShortcut: 'Ctrl/Cmd+Shift+P', printWithUrls: 'Imprimir con URLs de enlaces', printWithUrlsHint: 'Muestra la dirección tras cada enlace', printEmpty: 'Abre un documento para imprimirlo.', printUnsupported: 'Este entorno no permite imprimir.', graphTitle: 'Grafo de enlaces', graphEyebrow: 'BIBLIOTECA', graphHint: 'Documentos y sus enlaces', graphNeighbors: 'Solo vecinos del documento actual', graphFit: 'Encuadrar', graphClose: 'Cerrar grafo', graphCount: '{nodes} documentos · {edges} enlaces', graphEmpty: 'No hay documentos Markdown en esta biblioteca.', tagsLabel: 'Etiquetas', tagFilter: 'Filtrar por etiqueta', tagFilterHint: 'Escribe #etiqueta en la búsqueda',
     quickCaptureLabel: 'CAPTURA RÁPIDA', quickCaptureTitle: 'Guarda lo que tienes en mente', quickCapturePlaceholder: 'Escribe o pega texto, una URL o una idea…', quickCaptureHint: 'Enter guarda · Shift+Enter crea una línea · Esc cierra', inboxWorkspace: 'ESPACIO DE CAPTURA', inboxTitle: 'Inbox', inboxHomeHint: 'Captura ahora, organiza después.', newCapture: 'Nueva captura', chooseInbox: 'Elige una carpeta para tu Inbox', chooseInboxHint: 'Las capturas serán archivos locales normales, siempre bajo tu control.', chooseFolder: 'Elegir carpeta', importFiles: 'Importar archivos', selectCapture: 'Selecciona una captura', selectCaptureHint: 'Aquí podrás revisar y procesar lo que guardaste.', collections: 'Colecciones', sortBy: 'Ordenar por', mostRecent: 'Más reciente', name: 'Nombre', color: 'Color', quickAccess: 'Acceso rápido', favorites: 'Favoritos', activity: 'Actividad', recent: 'Recientes', editLibrary: 'Editar biblioteca', optionalIcon: 'Icono opcional', saveChanges: 'Guardar cambios', openInFolder: 'Abrir en carpeta',
     noRecentHome: 'No hay archivos recientes.', noFavoritesHome: 'Aún no has añadido favoritos.', fileCount: 'archivos', unknownError: 'error desconocido', folderNoDocuments: 'La carpeta no tiene documentos compatibles.', noHeadings: 'El documento no tiene encabezados.', visualNoHeadings: 'Este documento no usa encabezados Markdown.', sections: 'secciones', words: 'palabras', lines: 'líneas', referencesMarkdown: 'Las referencias se calculan para Markdown.', noOutgoing: 'Sin enlaces salientes.', noBacklinks: 'Sin backlinks.', unresolvedLink: 'Enlace no resuelto', minimal: 'Mínimo', low: 'Bajo', medium: 'Medio', high: 'Alto', xhigh: 'Muy alto', max: 'Máximo', bold: 'Negrita', italic: 'Cursiva', strike: 'Tachado', inlineCode: 'Código inline', headingOne: 'Título 1', headingTwo: 'Título 2', headingThree: 'Título 3', paragraph: 'Párrafo normal', quote: 'Cita', bulletList: 'Lista', numberedList: 'Lista numerada', removeFormat: 'Quitar formato',
   },
@@ -806,8 +835,11 @@ const TRANSLATIONS = {
     sidebarToggle: 'Show or hide sidebar', sidebarTooltip: 'Sidebar', openFile: 'Open file', openFolder: 'Open folder', newNote: 'New Markdown page', newNoteTooltip: 'New page · Ctrl+N', folderSearch: 'Search folder · Ctrl+Shift+F', quickOpen: 'Quick open', quickOpenTooltip: 'Quick open · Ctrl+P', quickCapture: 'Quick capture', quickCaptureTooltip: 'Quick capture · Ctrl+Alt+Space', searchLabel: 'Search', annotationsTitle: 'Highlights and notes', annotationsHint: 'Highlights and notes · Ctrl+Shift+A', annotationsEyebrow: 'READING', annotationsClose: 'Close notes',
     assistant: 'Codex assistant', codex: 'Codex AI', favoriteAdd: 'Add to favorites', favoriteRemove: 'Remove from favorites', index: 'Table of contents', settings: 'Settings', openTabs: 'Open files', searchPlaceholder: 'Titles, text, code…', read: 'Read', edit: 'Edit', save: 'Save', fileLabel: 'File', noFile: 'No file open', openHint: 'Open or drop a file to view it.', folderLabel: 'Folder', folderHint: 'Open a library to explore its documents.', recentsLabel: 'Recent', noRecents: 'No recent files yet.', referencesLabel: 'References', referencesHint: 'Open a Markdown file to see its links.', clearReading: 'Clear reading', readyTitle: 'Ready to open your documents', readyLead: 'A lightweight viewer with libraries, visual editing and wiki navigation.', dropzone: 'Drop your .md file here or use the button above.', tocSections: '0 sections', closeIndex: 'Close table of contents', tocEmpty: 'The table of contents will appear here.',
     codexChat: 'Codex chat', closeCodex: 'Close Codex', localAssistant: 'Local assistant', disconnected: 'Disconnected', codexNotice: 'Open a Markdown file to start the conversation.', codexInputPlaceholder: 'Ask about the Markdown…', modelAndEffort: 'Model and effort', model: 'Model', loading: 'Loading…', effort: 'Effort', default: 'Default', context: 'Context', documentContext: 'Markdown + references', folderContext: 'Entire folder', permissions: 'Permissions', readOnly: 'Read only', writeMarkdown: 'Edit Markdown', allowWeb: 'Allow web search in this message', cancel: 'Cancel', send: 'Send',
+    readingTimeMinutes: '{n} min', readingPercentRead: '{percent} read', readingPageOf: 'Page {page} of {total}',
     settingsTitle: 'Settings', theme: 'Theme', light: 'Light', dark: 'Dark', fontSize: 'Font size', accentColor: 'Accent color', gold: 'Gold', teal: 'Teal', coral: 'Coral', green: 'Green', purple: 'Purple', readerFont: 'Reading font', readingLayout: 'Reading layout', readingWidth: 'Column width', readingWidthAuto: 'Automatic', readingLineHeight: 'Line spacing', readingMargin: 'Margins', readingLayoutReset: 'Reset reading settings', readingMultiplier: '×', history: 'History', clearRecents: 'Clear recent files', globalCapture: 'Global capture', inboxShortcut: 'Inbox global shortcut', saveShortcut: 'Save shortcut', inboxFolder: 'Inbox folder', notConfigured: 'Not configured', changeFolder: 'Change folder', gettingStarted: 'Getting started', showTutorial: 'View tutorial', highlightYellow: 'Highlight yellow', highlightGreen: 'Highlight green', highlightPink: 'Highlight pink', highlightBlue: 'Highlight blue', removeHighlight: 'Remove highlight', backup: 'Backup', exportBackup: 'Export .zip', importBackup: 'Restore',
+    noteTemplate: 'Template', blankTemplate: 'Blank', dailyNote: 'Daily note', dailyNoteShortcut: 'Ctrl/Cmd+Shift+D', dailyNeedsFolder: 'Open a folder before creating the daily note.', dailyUnsaved: 'Save the current changes before opening the daily note.', dailyFailed: 'Could not open the daily note', draftFound: 'There is an unsaved draft from {date}.', draftRecover: 'Recover', draftDiscard: 'Discard', draftReplaceConfirm: 'Replace the current changes with the draft?', pasteImageNoPath: 'This document has no disk path: open it from the library to paste images.', pasteImageUnsupported: 'Only PNG, JPEG, GIF, WebP or BMP images can be pasted.', pasteImageFailed: 'Could not save the image',
     commandPalette: 'Command palette', paletteOpenPlaceholder: 'Open file…', paletteHint: 'Type to filter the folder documents', typeToSearch: 'Type a word or phrase.', noResults: 'No results found.', currentLibrary: 'Current library', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Open Inbox', pendingCaptures: 'Pending captures', systemPicker: 'System picker', changeLibrary: 'Change library', folderNavigationShortcut: 'Ctrl+Shift+F', focusMode: 'Focus mode', focusModeShortcut: 'Ctrl/Cmd+Shift+L', navigation: 'Navigation', openCodex: 'Open Codex', themeModes: 'Light / dark', changeTheme: 'Toggle theme', newPageLabel: 'NEW PAGE', createMarkdown: 'Create Markdown', title: 'Title', titlePlaceholder: 'Idea about the project', createdIn: 'Created in', createAndEdit: 'Create and edit', captureClipboard: 'Capture clipboard', addFile: 'Add file', capture: 'Capture', captures: 'Captures', backlinks: 'Backlinks',
+    exportHighlights: 'Export highlights', exportHighlightsHint: 'Saves a .md summary next to the document', exportHighlightsMarkdownOnly: 'Open a Markdown document to export its highlights.', exportHighlightsUnsaved: 'Save the document changes before exporting.', exportHighlightsEmpty: 'This document has no highlights or notes to export.', exportHighlightsOverwrite: '“{name}” already exists. Overwrite it? Cancel saves a copy with a suffix.', exportHighlightsDone: 'Summary exported', exportHighlightsFailed: 'Could not export the summary', printDocument: 'Print / PDF', printShortcut: 'Ctrl/Cmd+Shift+P', printWithUrls: 'Print with link URLs', printWithUrlsHint: 'Shows the address after each link', printEmpty: 'Open a document to print it.', printUnsupported: 'This environment cannot print.', graphTitle: 'Link graph', graphEyebrow: 'LIBRARY', graphHint: 'Documents and their links', graphNeighbors: 'Only neighbors of the current document', graphFit: 'Fit', graphClose: 'Close graph', graphCount: '{nodes} documents · {edges} links', graphEmpty: 'There are no Markdown documents in this library.', tagsLabel: 'Tags', tagFilter: 'Filter by tag', tagFilterHint: 'Type #tag in the search',
     quickCaptureLabel: 'QUICK CAPTURE', quickCaptureTitle: 'Save what is on your mind', quickCapturePlaceholder: 'Type or paste text, a URL or an idea…', quickCaptureHint: 'Enter saves · Shift+Enter adds a line · Esc closes', inboxWorkspace: 'CAPTURE SPACE', inboxTitle: 'Inbox', inboxHomeHint: 'Capture now, organize later.', newCapture: 'New capture', chooseInbox: 'Choose a folder for your Inbox', chooseInboxHint: 'Captures are regular local files, always under your control.', chooseFolder: 'Choose folder', importFiles: 'Import files', selectCapture: 'Select a capture', selectCaptureHint: 'Review and process what you saved here.', collections: 'Collections', sortBy: 'Sort by', mostRecent: 'Most recent', name: 'Name', color: 'Color', quickAccess: 'Quick access', favorites: 'Favorites', activity: 'Activity', recent: 'Recent', editLibrary: 'Edit library', optionalIcon: 'Optional icon', saveChanges: 'Save changes', openInFolder: 'Open in folder',
     noRecentHome: 'No recent files.', noFavoritesHome: 'You have not added favorites yet.', fileCount: 'files', unknownError: 'unknown error', folderNoDocuments: 'The folder has no supported documents.', noHeadings: 'This document has no headings.', visualNoHeadings: 'This document does not use Markdown headings.', sections: 'sections', words: 'words', lines: 'lines', referencesMarkdown: 'References are calculated for Markdown.', noOutgoing: 'No outgoing links.', noBacklinks: 'No backlinks.', unresolvedLink: 'Unresolved link', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Very high', max: 'Maximum', bold: 'Bold', italic: 'Italic', strike: 'Strikethrough', inlineCode: 'Inline code', headingOne: 'Heading 1', headingTwo: 'Heading 2', headingThree: 'Heading 3', paragraph: 'Normal paragraph', quote: 'Quote', bulletList: 'Bullet list', numberedList: 'Numbered list', removeFormat: 'Remove formatting',
   },
@@ -875,6 +907,7 @@ function applyLanguage(language) {
   if (state.filePath) {
     if (state.visualInfo) metaInfo.textContent = visualDetail(state.visualInfo)
     else updateMeta()
+    readingProgress.refresh()
     renderToc()
     renderReferences()
   } else if (reader.classList.contains('empty')) {
@@ -889,6 +922,49 @@ function applyLanguage(language) {
 
 let updater = null
 let backNavigation = null
+
+// Grupo C: exportar resaltados, imprimir, etiquetas y grafo de enlaces (lógica en sus módulos).
+const highlightsExporter = createHighlightsExporter({
+  panel: annotationsPanel,
+  controller: annotationsPanelController,
+  invoke,
+  getState: () => ({ path: state.filePath, fileName: state.fileName, kind: state.documentKind, dirty: state.dirty }),
+  documentExists: (path) => state.documentIndex.some((entry) => normalizedPath(entry.path).toLowerCase() === normalizedPath(path).toLowerCase()),
+  refreshLibrary: () => (state.folder ? loadFolder(state.folder, { keepTabs: true }) : Promise.resolve(true)),
+  openDocument: (path) => loadFileFromPath(path),
+  showMessage,
+  text: (key) => t(key),
+  language: () => state.language,
+})
+const printCurrentDocument = (showUrls = false) => void printReader({
+  reader,
+  fileName: state.fileName,
+  showUrls,
+  showMessage,
+  text: (key) => t(key),
+  beforePrint: isNative ? (name) => invoke('set_print_file_name', { name }) : null,
+})
+function openTagSearch(tag = '') {
+  openPalette('search')
+  if (commandPalette.classList.contains('hidden')) return
+  paletteInput.value = `#${tag}`
+  renderPaletteResults(paletteInput.value)
+}
+const fileTags = createFileTags({ anchor: metaInfo, onSelect: openTagSearch, label: () => t('tagsLabel') })
+const linkGraph = createLinkGraph({
+  getEntries: () => state.documentIndex,
+  resolve: resolveIndexedReference,
+  getCurrentPath: () => state.filePath,
+  openDocument: (path) => void loadFileFromPath(path),
+  text: (key) => t(key),
+})
+// Ctrl/Cmd+P ya es Apertura rápida: imprimir usa Ctrl/Cmd+Shift+P y se atiende antes que ese atajo.
+window.addEventListener('keydown', (event) => {
+  if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.altKey || event.key.toLowerCase() !== 'p') return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  printCurrentDocument()
+}, true)
 
 function libraries() {
   try {
@@ -1173,7 +1249,7 @@ async function runInboxAction(action) {
     } else if (action === 'archive') {
       await invoke('inbox_archive', { name: item.name })
     } else if (action === 'delete') {
-      if (!window.confirm(inboxText('', `¿Eliminar “${item.name}”?`, `Delete “${item.name}”?`))) return
+      if (!(await askConfirm(inboxText('', `¿Eliminar “${item.name}”?`, `Delete “${item.name}”?`)))) return
       await invoke('inbox_delete', { name: item.name })
     }
     selectedInboxPath = ''
@@ -1569,6 +1645,7 @@ function openNewNoteDialog() {
   newNotePreviousFocus = document.activeElement
   newNoteInput.value = ''
   newNoteError.classList.add('hidden')
+  templatePicker.refresh()
   newNoteModal.classList.remove('hidden')
   updateNewNotePreview()
   window.setTimeout(() => newNoteInput.focus(), 0)
@@ -1587,7 +1664,8 @@ async function createNewNote() {
   createButton.disabled = true
   const folder = state.folder
   try {
-    const created = await invoke('create_markdown_file', { folder, title: result.title })
+    const contents = await templatePicker.contentsFor(result.title)
+    const created = await invoke('create_markdown_file', { folder, title: result.title, ...(contents === undefined ? {} : { contents }) })
     await loadFolder(folder, { keepTabs: true })
     closeNewNoteDialog()
     await loadFileFromPath(created.path)
@@ -1608,6 +1686,58 @@ $('#newNoteCancel').addEventListener('click', closeNewNoteDialog)
 newNoteInput.addEventListener('input', updateNewNotePreview)
 $('#newNoteForm').addEventListener('submit', (event) => { event.preventDefault(); void createNewNote() })
 newNoteModal.addEventListener('click', (event) => { if (event.target === newNoteModal) closeNewNoteDialog() })
+
+// ---------- Plantillas, nota diaria, borradores e imágenes pegadas ----------
+
+const readTemplate = async (path) => (await invoke('read_markdown_file', { path, folder: state.folder || null })).contents
+const templatePicker = createTemplatePicker({ anchor: newNoteInput.closest('label'), getIndex: () => state.documentIndex, getFolder: () => state.folder, text: t, readTemplate })
+const openDailyNote = createDailyNote({
+  invoke,
+  getFolder: () => state.folder,
+  getIndex: () => state.documentIndex,
+  isDirty: () => state.dirty,
+  readTemplate,
+  refreshLibrary: (folder) => loadFolder(folder, { keepTabs: true }),
+  openPath: (path) => loadFileFromPath(path),
+  afterCreate: () => setMode('edit'),
+  notify: showMessage,
+  formatError,
+  text: t,
+})
+const recoveryDrafts = createRecoveryDrafts({
+  reader,
+  getState: () => state,
+  snapshot: editorMarkdownSnapshot,
+  recover: recoverDraft,
+  text: t,
+  formatDate: (date) => date.toLocaleString(state.language === 'en' ? 'en' : 'es', { dateStyle: 'medium', timeStyle: 'short' }),
+})
+const imagePaste = installImagePaste({ reader, dropzone, getState: () => state, getRoot: () => state.folder, invoke, notify: showMessage, text: t, formatError, mimeType: imageMimeType })
+
+async function recoverDraft(markdown) {
+  if (state.dirty && !(await askConfirm(t('draftReplaceConfirm')))) return
+  const { fileName, filePath, loadGeneration } = state
+  let html
+  try {
+    html = await invoke('render_markdown_text', { contents: markdown })
+  } catch (_) {
+    html = `<pre>${escapeHtml(markdown)}</pre>`
+  }
+  if (state.loadGeneration !== loadGeneration || state.filePath !== filePath) return
+  applyDocument(fileName, filePath, markdown, html)
+  setMode('edit')
+  state.dirty = true
+  saveButton.classList.remove('hidden')
+  renderDocumentTabs()
+  recoveryDrafts.schedule()
+}
+
+window.addEventListener('keydown', (event) => {
+  if (event.isComposing || !(event.ctrlKey || event.metaKey) || !event.shiftKey || event.altKey || event.key.toLowerCase() !== 'd') return
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+  event.preventDefault()
+  void openDailyNote()
+})
 
 $('#openButton').addEventListener('click', () => void openMarkdown())
 $('#openFolderButton').addEventListener('click', () => void openFolder())
@@ -1993,6 +2123,7 @@ async function loadFileFromPath(path, options = {}) {
     if (!isCurrentLoad(generation)) return false
     state.documentKind = kind
     applyDocument(payload.fileName, path, payload.contents, payload.html)
+    recoveryDrafts.offer(path, payload.contents)
     renderReferences()
     addRecent(path, payload.fileName)
     hideMessage()
@@ -2008,7 +2139,9 @@ async function loadFileFromPath(path, options = {}) {
 
 function beginDocumentLoad() {
   state.loadGeneration += 1
+  recoveryDrafts.hideBanner()
   state.documentLoading = true
+  documentSearch.reset()
   pendingUserScroll = false
   clearTimeout(pendingUserScrollTimer)
   reader._visualCleanup?.()
@@ -2063,12 +2196,11 @@ async function loadVisualFile(path, kind, entry, generation, { restorePosition =
   annotationsPanelController.setDocument({ key: annotationDocumentKey(path, payload.fileName), kind, name: payload.fileName })
   fileNameLabel.textContent = state.fileName
   metaInfo.textContent = visualDetail(info) || kind
+  readingProgress.refresh()
   toc.innerHTML = `<p class="muted">${t('visualNoHeadings')}</p>`
   tocCount.textContent = uiText('Vista visual', 'Visual view')
   searchInput.value = ''
   searchStats.textContent = '0'
-  state.matches = []
-  state.activeMatchIndex = -1
   markActiveTreeFile()
   renderReferences()
   addRecent(path, payload.fileName)
@@ -2081,18 +2213,8 @@ async function loadVisualFile(path, kind, entry, generation, { restorePosition =
 
 function recordCurrentReadingPosition() {
   if (!state.filePath || state.documentLoading) return false
-  if (state.documentKind === 'pdf') {
-    const rootTop = readerWrap.getBoundingClientRect().top
-    const slots = Array.from(reader.querySelectorAll('.pdf-page-slot[data-page-number]'))
-    const slot = slots.find((item) => item.getBoundingClientRect().bottom > rootTop) || slots.at(-1)
-    const page = Number(slot?.dataset.pageNumber)
-    const rect = slot?.getBoundingClientRect()
-    if (Number.isInteger(page) && page > 0 && rect?.height > 0) {
-      const offset = Math.max(0, Math.min(1, (rootTop - rect.top) / rect.height))
-      return readingSession.rememberPosition(state.filePath, { page, offset })
-    }
-  }
-  return readingSession.rememberPosition(state.filePath, { top: Math.max(0, readerWrap.scrollTop) })
+  // Incluye el % leído para poder mostrarlo en Recientes con el documento cerrado.
+  return readingSession.rememberPosition(state.filePath, readingProgress.currentPosition(state.documentKind))
 }
 
 async function restoreDocumentPosition(path, position, generation, interactionEpoch) {
@@ -2255,6 +2377,7 @@ async function closeDocumentTab(path) {
 }
 
 function clearCurrentDocument() {
+  recoveryDrafts.hideBanner()
   state.fileName = ''
   state.filePath = ''
   state.markdown = ''
@@ -2279,6 +2402,7 @@ function clearCurrentDocument() {
   annotationsPanelController.setDocument({ key: '', kind: '', name: '' })
   fileNameLabel.textContent = t('noFile')
   metaInfo.textContent = uiText('Selecciona un documento para visualizarlo.', 'Select a document to view it.')
+  readingProgress.refresh()
   renderReferences()
 }
 
@@ -2334,7 +2458,7 @@ function renderRecents() {
   recentsBox.innerHTML = list
     .map(
       (item) =>
-        `<button class="recent-link" type="button" data-path="${escapeHtml(item.path)}" data-file-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}">${escapeHtml(item.name)}</button>`,
+        `<button class="recent-link" type="button" data-path="${escapeHtml(item.path)}" data-file-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}"><span class="recent-name">${escapeHtml(item.name)}</span>${readingProgress.recentBadge(item.path)}</button>`,
     )
     .join('')
 }
@@ -2448,7 +2572,14 @@ function setMode(mode) {
 
 function editorMarkdown() {
   clearHighlights()
+  return editorMarkdownSnapshot()
+}
+
+// Igual que editorMarkdown pero sin tocar el DOM visible: el borrador de
+// recuperación se toma mientras se escribe y no debe borrar las marcas de búsqueda.
+function editorMarkdownSnapshot() {
   const clone = reader.cloneNode(true)
+  unwrapMarks(clone, 'mark[data-pliego-search]')
   restoreMarkdownSources(clone)
   clone.querySelectorAll('pre code').forEach((block) => {
     block.textContent = block.textContent
@@ -2509,6 +2640,7 @@ async function saveDocument() {
     await invoke('save_markdown_file', { path: state.filePath, contents: markdown })
     state.markdown = markdown
     state.dirty = false
+    recoveryDrafts.clear(state.filePath)
     if (state.mode !== 'edit') saveButton.classList.add('hidden')
     renderDocumentTabs()
     showMessage(`${uiText('Guardado', 'Saved')}: ${state.fileName}`)
@@ -2794,8 +2926,6 @@ function transformHighlightSelection(range, color, remove = false) {
   // El código y los diagramas no admiten resaltados (no se pueden guardar en Markdown).
   const nodes = textNodesInRange(range).filter((node) => !node.parentElement?.closest('code, pre, .inline-diagram, svg'))
   unwrapMarks(reader, 'mark[data-pliego-search]')
-  state.matches = []
-  state.activeMatchIndex = -1
   const meaningful = nodes.filter((node) => meaningfulTextLength(node.nodeValue) > 0)
   if (!meaningful.length) {
     reader.normalize()
@@ -2842,6 +2972,7 @@ async function persistHighlights() {
     // Se escribió el documento completo: los cambios pendientes ya están en disco.
     if (state.mode !== 'edit' && state.dirty) {
       state.dirty = false
+      recoveryDrafts.clear(state.filePath)
       saveButton.classList.add('hidden')
       renderDocumentTabs()
     }
@@ -2886,6 +3017,7 @@ async function listenTauriDragDrop() {
       } else if (event.payload.type === 'drop') {
         dropzone.classList.remove('visible')
         const path = event.payload.paths && event.payload.paths[0]
+        if (path && imagePaste.dropPaths(event.payload.paths)) return
         if (path) {
           void loadFileFromPath(path)
         }
@@ -2934,19 +3066,21 @@ void (async () => {
   await loadInitialFile()
 })()
 
-function confirmDiscardUnsaved() {
+async function confirmDiscardUnsaved() {
   if (!state.dirty) return true
-  return window.confirm(uiText(
+  return askConfirm(uiText(
     `«${state.fileName || 'sin título'}» tiene cambios sin guardar. ¿Cerrar y descartarlos?`,
     `“${state.fileName || 'untitled'}” has unsaved changes. Close and discard them?`,
   ))
 }
 
-void appWindow.onCloseRequested((event) => {
-  if (!confirmDiscardUnsaved()) {
+void appWindow.onCloseRequested(async (event) => {
+  if (!(await confirmDiscardUnsaved())) {
     event.preventDefault()
     return
   }
+  // El usuario eligió descartar: el borrador ya no debe ofrecerse.
+  if (state.dirty) recoveryDrafts.clear()
   recordCurrentReadingPosition()
   if (!startupIsRunning) persistOpenTabs()
   readingSession.flush()
@@ -3058,6 +3192,7 @@ function updateMeta() {
   const lines = state.markdown.split('\n').length
   const words = state.markdown.trim().split(/\s+/).filter(Boolean).length
   metaInfo.textContent = `${words} ${t('words')} · ${lines} ${t('lines')}`
+  readingProgress.refresh()
 }
 
 function renderToc() {
@@ -3086,24 +3221,10 @@ searchInput.addEventListener('keydown', (event) => {
   stepMatch(event.shiftKey ? -1 : 1)
 })
 
+// La lógica vive en document-search.js: ignora acentos, cruza etiquetas en línea
+// dentro de un bloque y también busca en EPUB (todos los capítulos) y PDF.
 function runSearch(term, { scroll = true } = {}) {
-  clearHighlights()
-  state.matches = []
-  state.activeMatchIndex = -1
-
-  const normalized = term.trim()
-  if (!normalized) {
-    searchStats.textContent = '0'
-    annotationsPanelController.refresh()
-    return
-  }
-
-  highlightMatches(reader, normalized.toLowerCase())
-  searchStats.textContent = String(state.matches.length)
-  if (state.matches.length > 0) {
-    activateMatch(0, { scroll })
-  }
-  annotationsPanelController.refresh()
+  documentSearch.run(term, { scroll })
 }
 
 function clearHighlights() {
@@ -3118,74 +3239,8 @@ function clearHighlights() {
   for (const parent of parents) parent.normalize()
 }
 
-function highlightMatches(root, term) {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-  const textNodes = []
-  let current = walker.nextNode()
-
-  while (current) {
-    const parentName = current.parentNode && current.parentNode.nodeName ? current.parentNode.nodeName.toLowerCase() : ''
-    if (parentName !== 'script' && parentName !== 'style' && current.nodeValue && current.nodeValue.trim()) {
-      textNodes.push(current)
-    }
-    current = walker.nextNode()
-  }
-
-  for (let index = 0; index < textNodes.length; index += 1) {
-    highlightInTextNode(textNodes[index], term)
-  }
-}
-
-function highlightInTextNode(node, term) {
-  const text = node.nodeValue || ''
-  const lower = text.toLowerCase()
-  if (lower.indexOf(term) === -1) {
-    return
-  }
-
-  const fragment = document.createDocumentFragment()
-  let cursor = 0
-  let matchIndex = lower.indexOf(term, cursor)
-
-  while (matchIndex !== -1) {
-    if (matchIndex > cursor) {
-      fragment.appendChild(document.createTextNode(text.slice(cursor, matchIndex)))
-    }
-    const mark = document.createElement('mark')
-    mark.setAttribute('data-pliego-search', '1')
-    mark.textContent = text.slice(matchIndex, matchIndex + term.length)
-    fragment.appendChild(mark)
-    state.matches.push(mark)
-    cursor = matchIndex + term.length
-    matchIndex = lower.indexOf(term, cursor)
-  }
-
-  if (cursor < text.length) {
-    fragment.appendChild(document.createTextNode(text.slice(cursor)))
-  }
-  if (node.parentNode) {
-    node.parentNode.replaceChild(fragment, node)
-  }
-}
-
 function stepMatch(direction) {
-  if (state.matches.some((mark) => !mark.isConnected)) runSearch(searchInput.value, { scroll: false })
-  if (!state.matches.length) {
-    return
-  }
-  const nextIndex = (state.activeMatchIndex + direction + state.matches.length) % state.matches.length
-  activateMatch(nextIndex)
-}
-
-function activateMatch(index, { scroll = true } = {}) {
-  for (let position = 0; position < state.matches.length; position += 1) {
-    state.matches[position].classList.remove('active-match')
-  }
-  state.activeMatchIndex = index
-  const active = state.matches[index]
-  active.classList.add('active-match')
-  if (scroll) active.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  searchStats.textContent = `${index + 1}/${state.matches.length}`
+  documentSearch.step(direction, searchInput.value)
 }
 
 // ---------- Apertura rápida, búsqueda global y referencias ----------
@@ -3194,6 +3249,7 @@ const PALETTE_COMMANDS = [
   { labelKey: 'focusMode', hintKey: 'focusModeShortcut', run: () => focusMode.enter() },
   { labelKey: 'newNote', hintKey: 'currentLibrary', run: openNewNoteDialog },
   { labelKey: 'quickCapture', hintKey: 'quickCaptureShortcut', run: () => openQuickCapture() },
+  { labelKey: 'dailyNote', hintKey: 'dailyNoteShortcut', run: () => void openDailyNote() },
   { labelKey: 'openInbox', hintKey: 'pendingCaptures', run: () => void openInbox() },
   { labelKey: 'openFile', hintKey: 'systemPicker', run: () => void openMarkdown() },
   { labelKey: 'openFolder', hintKey: 'changeLibrary', run: () => void openFolder() },
@@ -3201,6 +3257,11 @@ const PALETTE_COMMANDS = [
   { labelKey: 'sidebarToggle', hintKey: 'navigation', run: () => toggleSidebar() },
   { labelKey: 'annotationsTitle', hintKey: 'annotationsHint', run: toggleAnnotationsPanel },
   { labelKey: 'openCodex', hintKey: 'localAssistant', run: () => void openCodexPanel() },
+  { labelKey: 'exportHighlights', hintKey: 'exportHighlightsHint', run: () => void highlightsExporter.run() },
+  { labelKey: 'printDocument', hintKey: 'printShortcut', run: () => printCurrentDocument() },
+  { labelKey: 'printWithUrls', hintKey: 'printWithUrlsHint', run: () => printCurrentDocument(true) },
+  { labelKey: 'graphTitle', hintKey: 'graphHint', run: () => linkGraph.open() },
+  { labelKey: 'tagFilter', hintKey: 'tagFilterHint', run: () => openTagSearch() },
   { labelKey: 'changeTheme', hintKey: 'themeModes', run: () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
 ]
 
@@ -3270,7 +3331,10 @@ function paletteEntries(query) {
   if (state.paletteMode === 'commands') return PALETTE_COMMANDS.filter((item) => !term || `${paletteLabel(item)} ${paletteItemHint(item)}`.toLowerCase().includes(term))
   if (state.paletteMode === 'files') return state.documentIndex.filter((item) => !term || relativePath(item.path).toLowerCase().includes(term)).slice(0, 80)
   if (!term) return []
-  return state.documentIndex.filter((item) => `${item.name}\n${item.searchableText || ''}`.toLowerCase().includes(term)).slice(0, 100)
+  // `#etiqueta` filtra por etiquetas (frontmatter o en línea) en vez de por texto.
+  if (term.startsWith('#')) return parseTagQuery(term) ? filterByTag(state.documentIndex, term) : []
+  const folded = quickFold(term)
+  return state.documentIndex.filter((item) => foldedSearchText(item).includes(folded)).slice(0, 100)
 }
 
 function renderPaletteResults(query) {
@@ -3281,15 +3345,20 @@ function renderPaletteResults(query) {
   }
   paletteResults.innerHTML = results.map((item, index) => {
     const isCommand = state.paletteMode === 'commands'
-    const snippet = isCommand ? paletteItemHint(item) : state.paletteMode === 'search' ? searchSnippet(item.searchableText || '', query) : relativePath(item.path)
+    const snippet = isCommand ? paletteItemHint(item) : state.paletteMode === 'search' ? (parseTagQuery(query) ? tagsForEntry(item).map((tag) => `#${tag}`).join(' ') : searchSnippet(item.searchableText || '', query)) : relativePath(item.path)
     return `<button class="palette-result${index === 0 ? ' active' : ''}" data-palette-index="${index}" type="button"><span><strong>${escapeHtml(isCommand ? paletteLabel(item) : item.label || item.name)}</strong><small>${escapeHtml(snippet)}</small></span><em>${escapeHtml(isCommand ? uiText('Comando', 'Command') : item.kind)}</em></button>`
   }).join('')
 }
 
-function searchSnippet(text, query) {
-  const clean = text.replace(/\s+/g, ' ').trim()
-  const at = clean.toLowerCase().indexOf(query.trim().toLowerCase())
-  return at < 0 ? clean.slice(0, 140) : `${at > 45 ? '…' : ''}${clean.slice(Math.max(0, at - 45), at + query.length + 90)}${at + query.length + 90 < clean.length ? '…' : ''}`
+// Texto plegado (sin acentos ni mayúsculas) cacheado por entrada del índice:
+// plegar toda la biblioteca en cada tecla sería caro.
+const foldedSearchCache = new WeakMap()
+function foldedSearchText(item) {
+  const cached = foldedSearchCache.get(item)
+  if (cached && cached.name === item.name && cached.text === item.searchableText) return cached.folded
+  const folded = quickFold(`${item.name}\n${item.searchableText || ''}`)
+  foldedSearchCache.set(item, { name: item.name, text: item.searchableText, folded })
+  return folded
 }
 
 function relativePath(path) {
@@ -3339,6 +3408,7 @@ function resolveIndexedReference(sourcePath, reference) {
 }
 
 function renderReferences() {
+  fileTags.update(state.markdown, state.documentKind === 'markdown' && Boolean(state.filePath))
   if (state.documentKind !== 'markdown' || !state.filePath) {
     referenceCount.textContent = '0'
     referencesBox.innerHTML = `<p class="muted">${t('referencesMarkdown')}</p>`
@@ -3365,6 +3435,7 @@ const hiddenLayer = (element, close = () => element.classList.add('hidden')) => 
 backNavigation = isNative ? null : createBackNavigation({
   layers: [
     hiddenLayer(commandPalette, closePalette),
+    hiddenLayer(linkGraph.element, linkGraph.close),
     hiddenLayer(quickCapture, closeQuickCapture),
     hiddenLayer(newNoteModal, closeNewNoteDialog),
     hiddenLayer(libraryEditor),

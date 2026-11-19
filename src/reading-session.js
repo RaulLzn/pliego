@@ -26,12 +26,19 @@ function normalizeTab(value) {
   }
 }
 
+// `progress` (0..1) es opcional: permite mostrar el % leído en Recientes sin
+// tener el documento abierto (los píxeles de `top` no bastan para eso).
+function withProgress(position, value) {
+  if (Number.isFinite(value.progress)) position.progress = Math.round(Math.max(0, Math.min(1, value.progress)) * 10_000) / 10_000
+  return position
+}
+
 function normalizePosition(value) {
   if (!value || typeof value !== 'object') return null
   if (Number.isInteger(value.page) && value.page > 0 && Number.isFinite(value.offset)) {
-    return { page: value.page, offset: Math.max(0, Math.min(1, value.offset)) }
+    return withProgress({ page: value.page, offset: Math.max(0, Math.min(1, value.offset)) }, value)
   }
-  if (Number.isFinite(value.top) && value.top >= 0) return { top: Math.min(value.top, 1_000_000_000) }
+  if (Number.isFinite(value.top) && value.top >= 0) return withProgress({ top: Math.min(value.top, 1_000_000_000) }, value)
   return null
 }
 

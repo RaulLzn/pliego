@@ -1,0 +1,99 @@
+/* Grafo de enlaces: overlay a pantalla completa, colores desde los tokens del tema. */
+.link-graph {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg0);
+  color: var(--text-primary);
+}
+
+.link-graph.hidden { display: none; }
+
+.link-graph-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 12px calc(16px + env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid var(--border);
+  background: var(--bg1);
+}
+
+.link-graph-title { display: flex; flex: 1 1 220px; min-width: 0; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.link-graph-title .panel-label { margin: 0; width: 100%; }
+.link-graph-title h2 { margin: 0; font-size: 1.1rem; }
+.link-graph-count { font-size: .78rem; }
+
+.link-graph-option { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; color: var(--text-secondary); font-size: .84rem; cursor: pointer; user-select: none; }
+.link-graph-option input { width: 18px; height: 18px; accent-color: var(--accent); }
+.link-graph-option:has(input:disabled) { opacity: .5; cursor: default; }
+
+.link-graph-empty { margin: 0; padding: 40px 20px; text-align: center; }
+
+.link-graph-canvas {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.link-graph-canvas:active { cursor: grabbing; }
+
+.link-graph-edges line {
+  stroke: var(--border-light);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  transition: stroke .15s, opacity .15s;
+}
+
+.link-graph-node { cursor: pointer; }
+
+.link-graph-node circle {
+  fill: var(--text-muted);
+  stroke: var(--bg0);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  transition: fill .15s, opacity .15s;
+}
+
+.link-graph-node text {
+  display: none;
+  fill: var(--text-secondary);
+  font: 500 11px var(--ui-font);
+  paint-order: stroke;
+  stroke: var(--bg0);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.link-graph-canvas.show-labels .link-graph-node text,
+.link-graph-node.is-current text,
+.link-graph-node.is-focus text,
+.link-graph-node.is-neighbor text { display: block; }
+
+.link-graph-canvas.has-focus .link-graph-node:not(.is-focus, .is-neighbor, .is-current) { opacity: .35; }
+.link-graph-canvas.has-focus .link-graph-edges line:not(.is-active) { opacity: .3; }
+
+.link-graph-edges line.is-active { stroke: var(--accent); stroke-width: 1.6; }
+.link-graph-node.is-neighbor circle { fill: var(--teal, var(--accent)); }
+.link-graph-node.is-focus circle { fill: var(--accent); }
+.link-graph-node.is-current circle { fill: var(--accent); stroke: var(--text-primary); stroke-width: 2.5; }
+.link-graph-node.is-current text,
+.link-graph-node.is-focus text { fill: var(--text-primary); font-weight: 700; }
+
+@media (max-width: 640px) {
+  .link-graph-bar { gap: 8px 10px; }
+  .link-graph-title { flex-basis: 100%; }
+  .link-graph-option { flex: 1 1 auto; }
+  .link-graph-fit, .link-graph-close { min-height: 44px; min-width: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link-graph-edges line, .link-graph-node circle { transition: none; }
+}

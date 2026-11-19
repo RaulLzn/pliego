@@ -129,3 +129,14 @@ test('removes only confirmed missing paths while retaining external tabs and sav
   assert.deepEqual(filtered.tabs.map((tab) => tab.path), ['/library/a.md', '/external/b.pdf'])
   assert.equal(filtered.activePath, '/external/b.pdf')
 })
+
+test('keeps an optional reading progress next to the position', () => {
+  const session = createReadingSession({ storage: memoryStorage(), scheduleTimeout: null })
+  session.load()
+  session.rememberPosition('/library/notes.md', { top: 200, progress: 0.123456 })
+  session.rememberPosition('/library/book.pdf', { page: 2, offset: 0.5, progress: 7 })
+  session.rememberPosition('/library/old.md', { top: 10 })
+  assert.deepEqual(session.getPosition('/library/notes.md'), { top: 200, progress: 0.1235 })
+  assert.deepEqual(session.getPosition('/library/book.pdf'), { page: 2, offset: 0.5, progress: 1 })
+  assert.deepEqual(session.getPosition('/library/old.md'), { top: 10 })
+})

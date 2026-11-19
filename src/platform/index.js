@@ -7,6 +7,7 @@ const platform = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in windo
 export const { isNative, defaultLibrary, exportLibrary, importLibrary } = platform
 export const invoke = (...args) => platform.invoke(...args)
 export const openDialog = (...args) => platform.openDialog(...args)
+export const confirmDialog = (...args) => platform.confirmDialog(...args)
 export const listen = (...args) => platform.listen(...args)
 export const getCurrentWindow = () => platform.getCurrentWindow()
 export const importPicked = (path) => platform.importPicked(path)
