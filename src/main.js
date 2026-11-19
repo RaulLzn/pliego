@@ -19,6 +19,9 @@ import { createFocusMode } from './focus-mode.js'
 import { createBackNavigation, installEdgeSwipe } from './back-navigation.js'
 import { createReadingLayout } from './reading-layout.js'
 import { AnnotationsPanel, annotationDocumentKey } from './annotations.js'
+import { createRecoveryDrafts } from './recovery-drafts.js'
+import { installImagePaste } from './pasted-images.js'
+import { createDailyNote, createTemplatePicker } from './notes-ui.js'
 
 const THEME_KEY = 'pliego-theme'
 const RECENTS_KEY = 'pliego-recents'
@@ -797,6 +800,7 @@ const TRANSLATIONS = {
     assistant: 'Asistente Codex', codex: 'Codex AI', favoriteAdd: 'Añadir a favoritos', favoriteRemove: 'Quitar de favoritos', index: 'Índice', settings: 'Configuración', openTabs: 'Archivos abiertos', searchPlaceholder: 'Títulos, texto, código…', read: 'Lectura', edit: 'Edición', save: 'Guardar', fileLabel: 'Archivo', noFile: 'Ningún archivo abierto', openHint: 'Abre o arrastra un archivo para visualizarlo.', folderLabel: 'Carpeta', folderHint: 'Abre una biblioteca para explorar sus documentos.', recentsLabel: 'Recientes', noRecents: 'Aún no hay archivos recientes.', referencesLabel: 'Referencias', referencesHint: 'Abre un Markdown para ver sus enlaces.', clearReading: 'Lectura clara', readyTitle: 'Listo para abrir tus documentos', readyLead: 'Visor ligero con bibliotecas, edición visual y navegación wiki.', dropzone: 'Arrastra aquí tu archivo .md o usa el botón de arriba.', tocSections: '0 secciones', closeIndex: 'Cerrar índice', tocEmpty: 'El índice aparecerá aquí.',
     codexChat: 'Chat con Codex', closeCodex: 'Cerrar Codex', localAssistant: 'Asistente local', disconnected: 'Desconectado', codexNotice: 'Abre un Markdown para iniciar la conversación.', codexInputPlaceholder: 'Pregunta sobre el Markdown…', modelAndEffort: 'Modelo y esfuerzo', model: 'Modelo', loading: 'Cargando…', effort: 'Esfuerzo', default: 'Predeterminado', context: 'Contexto', documentContext: 'Markdown + referencias', folderContext: 'Toda la carpeta', permissions: 'Permisos', readOnly: 'Solo lectura', writeMarkdown: 'Editar Markdown', allowWeb: 'Permitir búsqueda web en este mensaje', cancel: 'Cancelar', send: 'Enviar',
     settingsTitle: 'Configuración', theme: 'Tema', light: 'Claro', dark: 'Oscuro', fontSize: 'Tamaño de letra', accentColor: 'Color de acento', gold: 'Dorado', teal: 'Verde azulado', coral: 'Coral', green: 'Verde', purple: 'Púrpura', readerFont: 'Fuente de lectura', readingLayout: 'Ajustes de lectura', readingWidth: 'Ancho de columna', readingWidthAuto: 'Automático', readingLineHeight: 'Interlineado', readingMargin: 'Márgenes', readingLayoutReset: 'Restablecer ajustes de lectura', readingMultiplier: '×', history: 'Historial', clearRecents: 'Limpiar recientes', globalCapture: 'Captura global', inboxShortcut: 'Atajo global del Inbox', saveShortcut: 'Guardar atajo', inboxFolder: 'Carpeta Inbox', notConfigured: 'Sin configurar', changeFolder: 'Cambiar carpeta', gettingStarted: 'Primeros pasos', showTutorial: 'Ver tutorial', highlightYellow: 'Resaltar amarillo', highlightGreen: 'Resaltar verde', highlightPink: 'Resaltar rosa', highlightBlue: 'Resaltar azul', removeHighlight: 'Quitar resaltado', backup: 'Copia de seguridad', exportBackup: 'Exportar .zip', importBackup: 'Restaurar',
+    noteTemplate: 'Plantilla', blankTemplate: 'En blanco', dailyNote: 'Nota diaria', dailyNoteShortcut: 'Ctrl/Cmd+Shift+D', dailyNeedsFolder: 'Abre una carpeta antes de crear la nota diaria.', dailyUnsaved: 'Guarda los cambios actuales antes de abrir la nota diaria.', dailyFailed: 'No pude abrir la nota diaria', draftFound: 'Hay un borrador sin guardar de {date}.', draftRecover: 'Recuperar', draftDiscard: 'Descartar', draftReplaceConfirm: '¿Sustituir los cambios actuales por el borrador?', pasteImageNoPath: 'Este documento no tiene ruta en disco: ábrelo desde la biblioteca para pegar imágenes.', pasteImageUnsupported: 'Solo se pueden pegar imágenes PNG, JPEG, GIF, WebP o BMP.', pasteImageFailed: 'No pude guardar la imagen',
     commandPalette: 'Paleta de comandos', paletteOpenPlaceholder: 'Abrir archivo…', paletteHint: 'Escribe para filtrar los documentos de la carpeta', typeToSearch: 'Escribe una palabra o frase.', noResults: 'No se encontraron resultados.', currentLibrary: 'Biblioteca actual', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Abrir Inbox', pendingCaptures: 'Capturas pendientes', systemPicker: 'Selector del sistema', changeLibrary: 'Cambiar biblioteca', folderNavigationShortcut: 'Ctrl+Shift+F', focusMode: 'Modo concentración', focusModeShortcut: 'Ctrl/Cmd+Shift+L', navigation: 'Navegación', openCodex: 'Abrir Codex', themeModes: 'Claro / oscuro', changeTheme: 'Cambiar tema', newPageLabel: 'NUEVA PÁGINA', createMarkdown: 'Crear Markdown', title: 'Título', titlePlaceholder: 'Idea sobre el proyecto', createdIn: 'Se creará en', createAndEdit: 'Crear y editar', captureClipboard: 'Capturar portapapeles', addFile: 'Añadir archivo', capture: 'Capturar', captures: 'Capturas', backlinks: 'Backlinks',
     quickCaptureLabel: 'CAPTURA RÁPIDA', quickCaptureTitle: 'Guarda lo que tienes en mente', quickCapturePlaceholder: 'Escribe o pega texto, una URL o una idea…', quickCaptureHint: 'Enter guarda · Shift+Enter crea una línea · Esc cierra', inboxWorkspace: 'ESPACIO DE CAPTURA', inboxTitle: 'Inbox', inboxHomeHint: 'Captura ahora, organiza después.', newCapture: 'Nueva captura', chooseInbox: 'Elige una carpeta para tu Inbox', chooseInboxHint: 'Las capturas serán archivos locales normales, siempre bajo tu control.', chooseFolder: 'Elegir carpeta', importFiles: 'Importar archivos', selectCapture: 'Selecciona una captura', selectCaptureHint: 'Aquí podrás revisar y procesar lo que guardaste.', collections: 'Colecciones', sortBy: 'Ordenar por', mostRecent: 'Más reciente', name: 'Nombre', color: 'Color', quickAccess: 'Acceso rápido', favorites: 'Favoritos', activity: 'Actividad', recent: 'Recientes', editLibrary: 'Editar biblioteca', optionalIcon: 'Icono opcional', saveChanges: 'Guardar cambios', openInFolder: 'Abrir en carpeta',
     noRecentHome: 'No hay archivos recientes.', noFavoritesHome: 'Aún no has añadido favoritos.', fileCount: 'archivos', unknownError: 'error desconocido', folderNoDocuments: 'La carpeta no tiene documentos compatibles.', noHeadings: 'El documento no tiene encabezados.', visualNoHeadings: 'Este documento no usa encabezados Markdown.', sections: 'secciones', words: 'palabras', lines: 'líneas', referencesMarkdown: 'Las referencias se calculan para Markdown.', noOutgoing: 'Sin enlaces salientes.', noBacklinks: 'Sin backlinks.', unresolvedLink: 'Enlace no resuelto', minimal: 'Mínimo', low: 'Bajo', medium: 'Medio', high: 'Alto', xhigh: 'Muy alto', max: 'Máximo', bold: 'Negrita', italic: 'Cursiva', strike: 'Tachado', inlineCode: 'Código inline', headingOne: 'Título 1', headingTwo: 'Título 2', headingThree: 'Título 3', paragraph: 'Párrafo normal', quote: 'Cita', bulletList: 'Lista', numberedList: 'Lista numerada', removeFormat: 'Quitar formato',
@@ -807,6 +811,7 @@ const TRANSLATIONS = {
     assistant: 'Codex assistant', codex: 'Codex AI', favoriteAdd: 'Add to favorites', favoriteRemove: 'Remove from favorites', index: 'Table of contents', settings: 'Settings', openTabs: 'Open files', searchPlaceholder: 'Titles, text, code…', read: 'Read', edit: 'Edit', save: 'Save', fileLabel: 'File', noFile: 'No file open', openHint: 'Open or drop a file to view it.', folderLabel: 'Folder', folderHint: 'Open a library to explore its documents.', recentsLabel: 'Recent', noRecents: 'No recent files yet.', referencesLabel: 'References', referencesHint: 'Open a Markdown file to see its links.', clearReading: 'Clear reading', readyTitle: 'Ready to open your documents', readyLead: 'A lightweight viewer with libraries, visual editing and wiki navigation.', dropzone: 'Drop your .md file here or use the button above.', tocSections: '0 sections', closeIndex: 'Close table of contents', tocEmpty: 'The table of contents will appear here.',
     codexChat: 'Codex chat', closeCodex: 'Close Codex', localAssistant: 'Local assistant', disconnected: 'Disconnected', codexNotice: 'Open a Markdown file to start the conversation.', codexInputPlaceholder: 'Ask about the Markdown…', modelAndEffort: 'Model and effort', model: 'Model', loading: 'Loading…', effort: 'Effort', default: 'Default', context: 'Context', documentContext: 'Markdown + references', folderContext: 'Entire folder', permissions: 'Permissions', readOnly: 'Read only', writeMarkdown: 'Edit Markdown', allowWeb: 'Allow web search in this message', cancel: 'Cancel', send: 'Send',
     settingsTitle: 'Settings', theme: 'Theme', light: 'Light', dark: 'Dark', fontSize: 'Font size', accentColor: 'Accent color', gold: 'Gold', teal: 'Teal', coral: 'Coral', green: 'Green', purple: 'Purple', readerFont: 'Reading font', readingLayout: 'Reading layout', readingWidth: 'Column width', readingWidthAuto: 'Automatic', readingLineHeight: 'Line spacing', readingMargin: 'Margins', readingLayoutReset: 'Reset reading settings', readingMultiplier: '×', history: 'History', clearRecents: 'Clear recent files', globalCapture: 'Global capture', inboxShortcut: 'Inbox global shortcut', saveShortcut: 'Save shortcut', inboxFolder: 'Inbox folder', notConfigured: 'Not configured', changeFolder: 'Change folder', gettingStarted: 'Getting started', showTutorial: 'View tutorial', highlightYellow: 'Highlight yellow', highlightGreen: 'Highlight green', highlightPink: 'Highlight pink', highlightBlue: 'Highlight blue', removeHighlight: 'Remove highlight', backup: 'Backup', exportBackup: 'Export .zip', importBackup: 'Restore',
+    noteTemplate: 'Template', blankTemplate: 'Blank', dailyNote: 'Daily note', dailyNoteShortcut: 'Ctrl/Cmd+Shift+D', dailyNeedsFolder: 'Open a folder before creating the daily note.', dailyUnsaved: 'Save the current changes before opening the daily note.', dailyFailed: 'Could not open the daily note', draftFound: 'There is an unsaved draft from {date}.', draftRecover: 'Recover', draftDiscard: 'Discard', draftReplaceConfirm: 'Replace the current changes with the draft?', pasteImageNoPath: 'This document has no disk path: open it from the library to paste images.', pasteImageUnsupported: 'Only PNG, JPEG, GIF, WebP or BMP images can be pasted.', pasteImageFailed: 'Could not save the image',
     commandPalette: 'Command palette', paletteOpenPlaceholder: 'Open file…', paletteHint: 'Type to filter the folder documents', typeToSearch: 'Type a word or phrase.', noResults: 'No results found.', currentLibrary: 'Current library', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Open Inbox', pendingCaptures: 'Pending captures', systemPicker: 'System picker', changeLibrary: 'Change library', folderNavigationShortcut: 'Ctrl+Shift+F', focusMode: 'Focus mode', focusModeShortcut: 'Ctrl/Cmd+Shift+L', navigation: 'Navigation', openCodex: 'Open Codex', themeModes: 'Light / dark', changeTheme: 'Toggle theme', newPageLabel: 'NEW PAGE', createMarkdown: 'Create Markdown', title: 'Title', titlePlaceholder: 'Idea about the project', createdIn: 'Created in', createAndEdit: 'Create and edit', captureClipboard: 'Capture clipboard', addFile: 'Add file', capture: 'Capture', captures: 'Captures', backlinks: 'Backlinks',
     quickCaptureLabel: 'QUICK CAPTURE', quickCaptureTitle: 'Save what is on your mind', quickCapturePlaceholder: 'Type or paste text, a URL or an idea…', quickCaptureHint: 'Enter saves · Shift+Enter adds a line · Esc closes', inboxWorkspace: 'CAPTURE SPACE', inboxTitle: 'Inbox', inboxHomeHint: 'Capture now, organize later.', newCapture: 'New capture', chooseInbox: 'Choose a folder for your Inbox', chooseInboxHint: 'Captures are regular local files, always under your control.', chooseFolder: 'Choose folder', importFiles: 'Import files', selectCapture: 'Select a capture', selectCaptureHint: 'Review and process what you saved here.', collections: 'Collections', sortBy: 'Sort by', mostRecent: 'Most recent', name: 'Name', color: 'Color', quickAccess: 'Quick access', favorites: 'Favorites', activity: 'Activity', recent: 'Recent', editLibrary: 'Edit library', optionalIcon: 'Optional icon', saveChanges: 'Save changes', openInFolder: 'Open in folder',
     noRecentHome: 'No recent files.', noFavoritesHome: 'You have not added favorites yet.', fileCount: 'files', unknownError: 'unknown error', folderNoDocuments: 'The folder has no supported documents.', noHeadings: 'This document has no headings.', visualNoHeadings: 'This document does not use Markdown headings.', sections: 'sections', words: 'words', lines: 'lines', referencesMarkdown: 'References are calculated for Markdown.', noOutgoing: 'No outgoing links.', noBacklinks: 'No backlinks.', unresolvedLink: 'Unresolved link', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Very high', max: 'Maximum', bold: 'Bold', italic: 'Italic', strike: 'Strikethrough', inlineCode: 'Inline code', headingOne: 'Heading 1', headingTwo: 'Heading 2', headingThree: 'Heading 3', paragraph: 'Normal paragraph', quote: 'Quote', bulletList: 'Bullet list', numberedList: 'Numbered list', removeFormat: 'Remove formatting',
@@ -1569,6 +1574,7 @@ function openNewNoteDialog() {
   newNotePreviousFocus = document.activeElement
   newNoteInput.value = ''
   newNoteError.classList.add('hidden')
+  templatePicker.refresh()
   newNoteModal.classList.remove('hidden')
   updateNewNotePreview()
   window.setTimeout(() => newNoteInput.focus(), 0)
@@ -1587,7 +1593,8 @@ async function createNewNote() {
   createButton.disabled = true
   const folder = state.folder
   try {
-    const created = await invoke('create_markdown_file', { folder, title: result.title })
+    const contents = await templatePicker.contentsFor(result.title)
+    const created = await invoke('create_markdown_file', { folder, title: result.title, ...(contents === undefined ? {} : { contents }) })
     await loadFolder(folder, { keepTabs: true })
     closeNewNoteDialog()
     await loadFileFromPath(created.path)
@@ -1608,6 +1615,58 @@ $('#newNoteCancel').addEventListener('click', closeNewNoteDialog)
 newNoteInput.addEventListener('input', updateNewNotePreview)
 $('#newNoteForm').addEventListener('submit', (event) => { event.preventDefault(); void createNewNote() })
 newNoteModal.addEventListener('click', (event) => { if (event.target === newNoteModal) closeNewNoteDialog() })
+
+// ---------- Plantillas, nota diaria, borradores e imágenes pegadas ----------
+
+const readTemplate = async (path) => (await invoke('read_markdown_file', { path, folder: state.folder || null })).contents
+const templatePicker = createTemplatePicker({ anchor: newNoteInput.closest('label'), getIndex: () => state.documentIndex, getFolder: () => state.folder, text: t, readTemplate })
+const openDailyNote = createDailyNote({
+  invoke,
+  getFolder: () => state.folder,
+  getIndex: () => state.documentIndex,
+  isDirty: () => state.dirty,
+  readTemplate,
+  refreshLibrary: (folder) => loadFolder(folder, { keepTabs: true }),
+  openPath: (path) => loadFileFromPath(path),
+  afterCreate: () => setMode('edit'),
+  notify: showMessage,
+  formatError,
+  text: t,
+})
+const recoveryDrafts = createRecoveryDrafts({
+  reader,
+  getState: () => state,
+  snapshot: editorMarkdownSnapshot,
+  recover: recoverDraft,
+  text: t,
+  formatDate: (date) => date.toLocaleString(state.language === 'en' ? 'en' : 'es', { dateStyle: 'medium', timeStyle: 'short' }),
+})
+const imagePaste = installImagePaste({ reader, dropzone, getState: () => state, getRoot: () => state.folder, invoke, notify: showMessage, text: t, formatError, mimeType: imageMimeType })
+
+async function recoverDraft(markdown) {
+  if (state.dirty && !window.confirm(t('draftReplaceConfirm'))) return
+  const { fileName, filePath, loadGeneration } = state
+  let html
+  try {
+    html = await invoke('render_markdown_text', { contents: markdown })
+  } catch (_) {
+    html = `<pre>${escapeHtml(markdown)}</pre>`
+  }
+  if (state.loadGeneration !== loadGeneration || state.filePath !== filePath) return
+  applyDocument(fileName, filePath, markdown, html)
+  setMode('edit')
+  state.dirty = true
+  saveButton.classList.remove('hidden')
+  renderDocumentTabs()
+  recoveryDrafts.schedule()
+}
+
+window.addEventListener('keydown', (event) => {
+  if (event.isComposing || !(event.ctrlKey || event.metaKey) || !event.shiftKey || event.altKey || event.key.toLowerCase() !== 'd') return
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+  event.preventDefault()
+  void openDailyNote()
+})
 
 $('#openButton').addEventListener('click', () => void openMarkdown())
 $('#openFolderButton').addEventListener('click', () => void openFolder())
@@ -1993,6 +2052,7 @@ async function loadFileFromPath(path, options = {}) {
     if (!isCurrentLoad(generation)) return false
     state.documentKind = kind
     applyDocument(payload.fileName, path, payload.contents, payload.html)
+    recoveryDrafts.offer(path, payload.contents)
     renderReferences()
     addRecent(path, payload.fileName)
     hideMessage()
@@ -2008,6 +2068,7 @@ async function loadFileFromPath(path, options = {}) {
 
 function beginDocumentLoad() {
   state.loadGeneration += 1
+  recoveryDrafts.hideBanner()
   state.documentLoading = true
   pendingUserScroll = false
   clearTimeout(pendingUserScrollTimer)
@@ -2255,6 +2316,7 @@ async function closeDocumentTab(path) {
 }
 
 function clearCurrentDocument() {
+  recoveryDrafts.hideBanner()
   state.fileName = ''
   state.filePath = ''
   state.markdown = ''
@@ -2448,7 +2510,14 @@ function setMode(mode) {
 
 function editorMarkdown() {
   clearHighlights()
+  return editorMarkdownSnapshot()
+}
+
+// Igual que editorMarkdown pero sin tocar el DOM visible: el borrador de
+// recuperación se toma mientras se escribe y no debe borrar las marcas de búsqueda.
+function editorMarkdownSnapshot() {
   const clone = reader.cloneNode(true)
+  unwrapMarks(clone, 'mark[data-pliego-search]')
   restoreMarkdownSources(clone)
   clone.querySelectorAll('pre code').forEach((block) => {
     block.textContent = block.textContent
@@ -2509,6 +2578,7 @@ async function saveDocument() {
     await invoke('save_markdown_file', { path: state.filePath, contents: markdown })
     state.markdown = markdown
     state.dirty = false
+    recoveryDrafts.clear(state.filePath)
     if (state.mode !== 'edit') saveButton.classList.add('hidden')
     renderDocumentTabs()
     showMessage(`${uiText('Guardado', 'Saved')}: ${state.fileName}`)
@@ -2842,6 +2912,7 @@ async function persistHighlights() {
     // Se escribió el documento completo: los cambios pendientes ya están en disco.
     if (state.mode !== 'edit' && state.dirty) {
       state.dirty = false
+      recoveryDrafts.clear(state.filePath)
       saveButton.classList.add('hidden')
       renderDocumentTabs()
     }
@@ -2886,6 +2957,7 @@ async function listenTauriDragDrop() {
       } else if (event.payload.type === 'drop') {
         dropzone.classList.remove('visible')
         const path = event.payload.paths && event.payload.paths[0]
+        if (path && imagePaste.dropPaths(event.payload.paths)) return
         if (path) {
           void loadFileFromPath(path)
         }
@@ -2947,6 +3019,8 @@ void appWindow.onCloseRequested((event) => {
     event.preventDefault()
     return
   }
+  // El usuario eligió descartar: el borrador ya no debe ofrecerse.
+  if (state.dirty) recoveryDrafts.clear()
   recordCurrentReadingPosition()
   if (!startupIsRunning) persistOpenTabs()
   readingSession.flush()
@@ -3194,6 +3268,7 @@ const PALETTE_COMMANDS = [
   { labelKey: 'focusMode', hintKey: 'focusModeShortcut', run: () => focusMode.enter() },
   { labelKey: 'newNote', hintKey: 'currentLibrary', run: openNewNoteDialog },
   { labelKey: 'quickCapture', hintKey: 'quickCaptureShortcut', run: () => openQuickCapture() },
+  { labelKey: 'dailyNote', hintKey: 'dailyNoteShortcut', run: () => void openDailyNote() },
   { labelKey: 'openInbox', hintKey: 'pendingCaptures', run: () => void openInbox() },
   { labelKey: 'openFile', hintKey: 'systemPicker', run: () => void openMarkdown() },
   { labelKey: 'openFolder', hintKey: 'changeLibrary', run: () => void openFolder() },
