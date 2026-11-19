@@ -134,7 +134,7 @@ async function renderDiagramsForPaper(root) {
   }
 }
 
-export async function printReader({ reader, fileName, showUrls = false, showMessage, text }) {
+export async function printReader({ reader, fileName, showUrls = false, showMessage, text, beforePrint }) {
   if (!reader || reader.classList.contains('empty') || !reader.textContent.trim() && !reader.querySelector('img, svg, canvas')) {
     showMessage(text('printEmpty'))
     return
@@ -149,6 +149,8 @@ export async function printReader({ reader, fileName, showUrls = false, showMess
   const previousTitle = document.title
   document.title = String(fileName || previousTitle).replace(/\.[^.]+$/, '') || previousTitle
   const restore = () => { document.title = previousTitle }
+  // En escritorio el diálogo de GTK no ve document.title a tiempo: se le pasa el nombre.
+  try { await beforePrint?.(document.title) } catch (_) { /* solo afecta al nombre propuesto */ }
   window.addEventListener('afterprint', restore, { once: true })
   try {
     // En macOS Tauri sustituye window.print por una llamada asíncrona al webview.

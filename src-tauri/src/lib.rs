@@ -17,6 +17,7 @@ use tauri::Manager;
 mod codex;
 mod inbox;
 mod package_update;
+mod print_name;
 
 const MAX_VISUAL_FILE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_TEXT_FILE_BYTES: u64 = 32 * 1024 * 1024;
@@ -946,6 +947,7 @@ pub fn run() {
             if let Err(error) = inbox::register_configured_shortcut(app.handle()) {
                 eprintln!("Pliego Inbox: {error}");
             }
+            print_name::install(app);
             Ok(())
         })
         .manage(package_update::PackageUpdateState::default())
@@ -954,6 +956,7 @@ pub fn run() {
             package_update::package_update_download,
             package_update::package_update_install,
             get_launch_paths,
+            print_name::set_print_file_name,
             read_markdown_file,
             render_markdown_text,
             list_markdown_tree,

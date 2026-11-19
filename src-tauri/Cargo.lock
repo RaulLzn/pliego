@@ -81,6 +81,7 @@ version = "1.7.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "gtk",
  "log",
  "pliego-render",
  "serde",
@@ -94,6 +95,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "tempfile",
+ "webkit2gtk",
 ]
 
 [[package]]

@@ -936,7 +936,14 @@ const highlightsExporter = createHighlightsExporter({
   text: (key) => t(key),
   language: () => state.language,
 })
-const printCurrentDocument = (showUrls = false) => void printReader({ reader, fileName: state.fileName, showUrls, showMessage, text: (key) => t(key) })
+const printCurrentDocument = (showUrls = false) => void printReader({
+  reader,
+  fileName: state.fileName,
+  showUrls,
+  showMessage,
+  text: (key) => t(key),
+  beforePrint: isNative ? (name) => invoke('set_print_file_name', { name }) : null,
+})
 function openTagSearch(tag = '') {
   openPalette('search')
   if (commandPalette.classList.contains('hidden')) return

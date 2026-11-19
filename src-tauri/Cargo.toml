@@ -32,3 +32,9 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tempfile = "3"
+
+# Acceso directo a WebKitGTK para proponer el nombre del PDF al imprimir.
+# Mismas versiones que ya arrastra Tauri (sin dependencias nuevas en el lockfile).
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
+gtk = "0.18"
