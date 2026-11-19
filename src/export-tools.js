@@ -17,7 +17,7 @@ function parentOf(path) {
  * Exporta los resaltados y notas del documento actual a `<nombre> - resaltados.md` junto a él.
  * Las dependencias vienen de main.js para no duplicar estado.
  */
-export function createHighlightsExporter({ panel, controller, invoke, getState, documentExists, refreshLibrary, openDocument, showMessage, text, language }) {
+export function createHighlightsExporter({ panel, controller, invoke, getState, documentExists, refreshLibrary, openDocument, showMessage, text, language, formatError = (error) => error?.message || error }) {
   const button = document.createElement('button')
   button.type = 'button'
   button.className = 'ghost-button annotations-export'
@@ -78,7 +78,7 @@ export function createHighlightsExporter({ panel, controller, invoke, getState, 
       await openDocument(path)
       showMessage(`${text('exportHighlightsDone')}: ${path.split(/[\\/]/).pop()}`)
     } catch (error) {
-      showMessage(`${text('exportHighlightsFailed')}: ${error?.message || error}`)
+      showMessage(`${text('exportHighlightsFailed')}: ${formatError(error)}`)
     } finally {
       busy = false
       button.disabled = false

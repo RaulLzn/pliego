@@ -26,6 +26,7 @@ import { createHighlightsExporter, printReader } from './export-tools.js'
 import { createFileTags, filterByTag, parseTagQuery, tagsForEntry } from './tags.js'
 import { createLinkGraph } from './link-graph.js'
 import { askConfirm, setConfirmImplementation } from './confirm-dialog.js'
+import { translateBackendError } from './backend-errors.js'
 import { createDocumentSearch } from './document-search.js'
 import { createReadingProgress } from './reading-progress.js'
 import { quickFold, searchSnippet } from './search-text.js'
@@ -933,6 +934,7 @@ const highlightsExporter = createHighlightsExporter({
   refreshLibrary: () => (state.folder ? loadFolder(state.folder, { keepTabs: true }) : Promise.resolve(true)),
   openDocument: (path) => loadFileFromPath(path),
   showMessage,
+  formatError,
   text: (key) => t(key),
   language: () => state.language,
 })
@@ -3528,37 +3530,8 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;')
 }
 
-const BACKEND_ERROR_TRANSLATIONS = [
-  ['No se puede localizar el archivo:', 'Could not locate the file:'],
-  ['No se pudo abrir el explorador de archivos:', 'Could not open the file manager:'],
-  ['No se pudo resolver la configuración:', 'Could not resolve the configuration:'],
-  ['La configuración del Inbox no está disponible', 'Inbox configuration is unavailable'],
-  ['La carpeta del Inbox debe usar una ruta absoluta', 'The Inbox folder must use an absolute path'],
-  ['Nombre de elemento inválido', 'Invalid item name'],
-  ['El nombre no puede contener rutas', 'The name cannot contain path separators'],
-  ['El elemento del Inbox no existe', 'The Inbox item does not exist'],
-  ['El elemento está fuera del Inbox', 'The item is outside the Inbox'],
-  ['Elige primero una carpeta para el Inbox', 'Choose an Inbox folder first'],
-  ['La captura está vacía', 'The capture is empty'],
-  ['Atajo global inválido', 'Invalid global shortcut'],
-  ['No se pudo registrar el atajo:', 'Could not register the shortcut:'],
-  ['La URL debe comenzar por http:// o https://', 'The URL must start with http:// or https://'],
-  ['No es un archivo válido:', 'Not a valid file:'],
-  ['Ya existe un elemento con ese nombre', 'An item with that name already exists'],
-  ['La carpeta de destino no es válida', 'The destination folder is not valid'],
-  ['El Inbox no elimina carpetas', 'Inbox does not delete folders'],
-  ['Escribe un título para la página', 'Enter a title for the page'],
-  ['El título no puede superar 120 caracteres', 'The title cannot exceed 120 characters'],
-  ['El título contiene caracteres no permitidos', 'The title contains invalid characters'],
-  ['El título no produce un nombre de archivo válido', 'The title does not produce a valid file name'],
-  ['Ese nombre está reservado por el sistema', 'That name is reserved by the operating system'],
-  ['Abre una carpeta válida antes de crear una página', 'Open a valid folder before creating a page'],
-  ['Ya existe una página llamada ', 'A page named '],
-]
 
 function formatError(error) {
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : t('unknownError')
-  if (state.language !== 'en') return message
-  const translation = BACKEND_ERROR_TRANSLATIONS.find(([source]) => message.startsWith(source))
-  return translation ? translation[1] + message.slice(translation[0].length) : message
+  return state.language === 'en' ? translateBackendError(message) : message
 }
