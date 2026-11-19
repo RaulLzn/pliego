@@ -4,6 +4,8 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 
 ## Unreleased
 
+## [1.8.0] - 2026-11-18
+
 ### Versión web (PWA)
 
 - Pliego funciona en el navegador y se instala en iPhone, iPad y Android con «Añadir a pantalla de inicio». Funciona sin conexión y se actualiza solo.
@@ -19,6 +21,31 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 - Imprimir / guardar como PDF (paleta o Ctrl/Cmd+Shift+P; Ctrl+P sigue siendo Apertura rápida): solo el contenido del lector, en tema claro, sin partir imágenes, tablas ni bloques de código. Variante «con URLs de enlaces».
 - Etiquetas: se leen de `tags:` en el frontmatter y de `#etiquetas` en el texto. Aparecen en la ficha del documento y `#etiqueta` en la búsqueda de la carpeta filtra por ellas.
 - Grafo de enlaces a pantalla completa con zoom, desplazamiento, pellizco y arrastre de nodos; resalta el documento actual y sus vecinos y permite limitarse a ese vecindario en bibliotecas grandes.
+
+### Búsqueda y lectura
+
+- El buscador del documento encuentra términos de dos o más letras también después de una búsqueda anterior, no distingue acentos («computo» encuentra «Cómputo») y encuentra palabras cortadas por un resaltado o un formato. Enter / Mayús+Enter recorren las coincidencias.
+- Búsqueda dentro de PDF y EPUB, con salto a la página de cada coincidencia.
+- Tiempo de lectura y porcentaje leído en la ficha del documento y en Recientes; en PDF, «Página X de Y».
+
+### Edición y notas
+
+- Borrador de recuperación: mientras se edita se guarda una copia y, si Pliego se cierra sin guardar, al reabrir el documento ofrece recuperarla o descartarla.
+- Pegar o soltar imágenes en el editor: se guardan en `assets/` junto al documento y se enlazan con ruta relativa.
+- Plantillas de página desde la carpeta `Plantillas/` (`{{titulo}}`, `{{fecha}}`, `{{hora}}`) y nota diaria en `Diario/AAAA-MM-DD.md` con Ctrl/Cmd+Mayús+D.
+
+### Correcciones
+
+- Los cambios sin guardar ya no se pierden al volver a Lectura y abrir otro archivo; Ctrl+S guarda también desde Lectura y cerrar la ventana pide confirmación.
+- Las confirmaciones funcionan en escritorio: el Inbox ya no elimina sin preguntar.
+- Resaltar ya no parte párrafos ni negritas, ni estropea imágenes, diagramas Mermaid o código al guardar el documento.
+- El HTML de los documentos Markdown se filtra antes de mostrarse: un `.md` ya no puede ejecutar código en la versión web.
+- Los enlaces `../`, `./` y con `%20` se resuelven y generan backlinks; crear una página o importar archivos ya no cierra las pestañas.
+- Archivos en Windows-1252 o con BOM se abren correctamente sin perder acentos al guardar; el guardado en escritorio es atómico.
+- Una subcarpeta ilegible o un enlace simbólico roto ya no impiden abrir la biblioteca.
+- Codex ya no congela la ventana mientras responde y se encuentra en Windows y macOS.
+- Al imprimir a PDF en Linux se propone `Documentos/<documento>.pdf`, y los diagramas se imprimen en colores claros.
+- Los errores del sistema de archivos y de imágenes aparecen traducidos en la interfaz en inglés.
 
 ## [1.7.1] - 2026-09-30
 
