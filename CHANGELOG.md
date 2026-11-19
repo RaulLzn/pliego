@@ -13,6 +13,13 @@ Todos los cambios relevantes de Pliego se documentan en este archivo. El proyect
 - Publicación automática en GitHub Pages desde `main`.
 - Abrir documento en iPhone es fiable: avisa de los archivos que no se pueden leer (iCloud sin descargar, tipos no admitidos) y ya no deja en gris los `.md`. «Abrir carpeta» pasa a «Carpetas de la biblioteca» e importa carpetas del dispositivo donde el navegador lo permite; en iOS explica cómo traerlas en `.zip`.
 
+### Exportar y organizar
+
+- Exportar resaltados y notas: desde el panel de notas o la paleta se guarda `<documento> - resaltados.md` junto al documento, con cada cita, su color, el comentario y un `[[enlace]]` al original. Si ya existe, pregunta si sobrescribir o guarda una copia con sufijo.
+- Imprimir / guardar como PDF (paleta o Ctrl/Cmd+Shift+P; Ctrl+P sigue siendo Apertura rápida): solo el contenido del lector, en tema claro, sin partir imágenes, tablas ni bloques de código. Variante «con URLs de enlaces».
+- Etiquetas: se leen de `tags:` en el frontmatter y de `#etiquetas` en el texto. Aparecen en la ficha del documento y `#etiqueta` en la búsqueda de la carpeta filtra por ellas.
+- Grafo de enlaces a pantalla completa con zoom, desplazamiento, pellizco y arrastre de nodos; resalta el documento actual y sus vecinos y permite limitarse a ese vecindario en bibliotecas grandes.
+
 ## [1.7.1] - 2026-09-30
 
 ### Actualizaciones Linux

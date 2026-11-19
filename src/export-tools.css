@@ -1,0 +1,84 @@
+/* Exportar resaltados, etiquetas del documento e impresión / PDF. */
+.annotations-export { min-height: 32px; padding: 4px 10px; font-size: .74rem; white-space: nowrap; }
+
+.file-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.file-tags.hidden { display: none; }
+.file-tag {
+  min-height: 26px;
+  padding: 2px 9px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font: 600 .74rem var(--ui-font);
+  cursor: pointer;
+}
+.file-tag:hover, .file-tag:focus-visible { border-color: var(--accent); color: var(--text-primary); }
+@media (pointer: coarse) { .file-tag { min-height: 34px; padding-inline: 12px; } }
+
+/* El contenedor de impresión no existe en pantalla. */
+.pliego-print-root { display: none; }
+
+@media print {
+  @page { margin: 18mm 16mm; }
+
+  html, body {
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body > :not(.pliego-print-root) { display: none !important; }
+
+  /* Tema claro forzado: los tokens se redefinen dentro del contenido impreso. */
+  .pliego-print-root.reader {
+    --bg0: #f6f6f4;
+    --bg1: #fff;
+    --bg2: #f2f1ee;
+    --bg3: #eceae5;
+    --border: #d8d4cc;
+    --border-light: #c9c4ba;
+    --text-primary: #16181d;
+    --text-secondary: #3d4250;
+    --text-muted: #6b7180;
+    --accent: #7a5410;
+    --accent-dim: #f3ecdf;
+    --accent-glow: #c9b48d;
+    --font-scale: 1;
+    display: block !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #16181d;
+    color-scheme: light;
+    font-size: 11.5pt;
+    overflow: visible !important;
+  }
+
+  .pliego-print-root.reader :is(p, li, blockquote) { line-height: 1.6; orphans: 3; widows: 3; }
+  .pliego-print-root.reader :is(h1, h2, h3, h4, h5, h6) { break-after: avoid; break-inside: avoid; page-break-after: avoid; }
+  .pliego-print-root.reader :is(img, svg, figure, pre, table, blockquote, .inline-diagram, .mermaid, .pdf-page) { break-inside: avoid; page-break-inside: avoid; }
+  .pliego-print-root.reader tr { break-inside: avoid; }
+  .pliego-print-root.reader thead { display: table-header-group; }
+  .pliego-print-root.reader pre { overflow: visible; white-space: pre-wrap; overflow-wrap: anywhere; background: #f6f6f4; }
+  .pliego-print-root.reader img { max-width: 100% !important; height: auto; }
+  .pliego-print-root.reader :is(.office-document, .ebook-document) { max-width: none; min-height: 0; padding: 0; box-shadow: none; background: #fff; }
+  .pliego-print-root.reader :is(.pdf-page, .pdf-page-slot) { box-shadow: none; }
+  .pliego-print-root.reader .pdf-document { margin: 0; gap: 0; }
+  .pliego-print-root.reader .pdf-page { break-after: page; }
+  .pliego-print-root.reader a { color: #1d4f91; text-decoration: underline; }
+  .pliego-print-root.reader mark.hl { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* URL visible tras los enlaces externos (opción «con URLs»). */
+  .pliego-print-root.print-show-urls a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    color: #555;
+    font-size: .82em;
+    overflow-wrap: anywhere;
+  }
+}
