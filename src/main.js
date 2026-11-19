@@ -22,6 +22,9 @@ import { AnnotationsPanel, annotationDocumentKey } from './annotations.js'
 import { createRecoveryDrafts } from './recovery-drafts.js'
 import { installImagePaste } from './pasted-images.js'
 import { createDailyNote, createTemplatePicker } from './notes-ui.js'
+import { createHighlightsExporter, printReader } from './export-tools.js'
+import { createFileTags, filterByTag, parseTagQuery, tagsForEntry } from './tags.js'
+import { createLinkGraph } from './link-graph.js'
 
 const THEME_KEY = 'pliego-theme'
 const RECENTS_KEY = 'pliego-recents'
@@ -802,6 +805,7 @@ const TRANSLATIONS = {
     settingsTitle: 'Configuración', theme: 'Tema', light: 'Claro', dark: 'Oscuro', fontSize: 'Tamaño de letra', accentColor: 'Color de acento', gold: 'Dorado', teal: 'Verde azulado', coral: 'Coral', green: 'Verde', purple: 'Púrpura', readerFont: 'Fuente de lectura', readingLayout: 'Ajustes de lectura', readingWidth: 'Ancho de columna', readingWidthAuto: 'Automático', readingLineHeight: 'Interlineado', readingMargin: 'Márgenes', readingLayoutReset: 'Restablecer ajustes de lectura', readingMultiplier: '×', history: 'Historial', clearRecents: 'Limpiar recientes', globalCapture: 'Captura global', inboxShortcut: 'Atajo global del Inbox', saveShortcut: 'Guardar atajo', inboxFolder: 'Carpeta Inbox', notConfigured: 'Sin configurar', changeFolder: 'Cambiar carpeta', gettingStarted: 'Primeros pasos', showTutorial: 'Ver tutorial', highlightYellow: 'Resaltar amarillo', highlightGreen: 'Resaltar verde', highlightPink: 'Resaltar rosa', highlightBlue: 'Resaltar azul', removeHighlight: 'Quitar resaltado', backup: 'Copia de seguridad', exportBackup: 'Exportar .zip', importBackup: 'Restaurar',
     noteTemplate: 'Plantilla', blankTemplate: 'En blanco', dailyNote: 'Nota diaria', dailyNoteShortcut: 'Ctrl/Cmd+Shift+D', dailyNeedsFolder: 'Abre una carpeta antes de crear la nota diaria.', dailyUnsaved: 'Guarda los cambios actuales antes de abrir la nota diaria.', dailyFailed: 'No pude abrir la nota diaria', draftFound: 'Hay un borrador sin guardar de {date}.', draftRecover: 'Recuperar', draftDiscard: 'Descartar', draftReplaceConfirm: '¿Sustituir los cambios actuales por el borrador?', pasteImageNoPath: 'Este documento no tiene ruta en disco: ábrelo desde la biblioteca para pegar imágenes.', pasteImageUnsupported: 'Solo se pueden pegar imágenes PNG, JPEG, GIF, WebP o BMP.', pasteImageFailed: 'No pude guardar la imagen',
     commandPalette: 'Paleta de comandos', paletteOpenPlaceholder: 'Abrir archivo…', paletteHint: 'Escribe para filtrar los documentos de la carpeta', typeToSearch: 'Escribe una palabra o frase.', noResults: 'No se encontraron resultados.', currentLibrary: 'Biblioteca actual', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Abrir Inbox', pendingCaptures: 'Capturas pendientes', systemPicker: 'Selector del sistema', changeLibrary: 'Cambiar biblioteca', folderNavigationShortcut: 'Ctrl+Shift+F', focusMode: 'Modo concentración', focusModeShortcut: 'Ctrl/Cmd+Shift+L', navigation: 'Navegación', openCodex: 'Abrir Codex', themeModes: 'Claro / oscuro', changeTheme: 'Cambiar tema', newPageLabel: 'NUEVA PÁGINA', createMarkdown: 'Crear Markdown', title: 'Título', titlePlaceholder: 'Idea sobre el proyecto', createdIn: 'Se creará en', createAndEdit: 'Crear y editar', captureClipboard: 'Capturar portapapeles', addFile: 'Añadir archivo', capture: 'Capturar', captures: 'Capturas', backlinks: 'Backlinks',
+    exportHighlights: 'Exportar resaltados', exportHighlightsHint: 'Guarda un resumen .md junto al documento', exportHighlightsMarkdownOnly: 'Abre un documento Markdown para exportar sus resaltados.', exportHighlightsUnsaved: 'Guarda los cambios del documento antes de exportar.', exportHighlightsEmpty: 'Este documento no tiene resaltados ni notas que exportar.', exportHighlightsOverwrite: 'Ya existe «{name}». ¿Sobrescribirlo? Cancelar guarda una copia con sufijo.', exportHighlightsDone: 'Resumen exportado', exportHighlightsFailed: 'No se pudo exportar el resumen', printDocument: 'Imprimir / PDF', printShortcut: 'Ctrl/Cmd+Shift+P', printWithUrls: 'Imprimir con URLs de enlaces', printWithUrlsHint: 'Muestra la dirección tras cada enlace', printEmpty: 'Abre un documento para imprimirlo.', printUnsupported: 'Este entorno no permite imprimir.', graphTitle: 'Grafo de enlaces', graphEyebrow: 'BIBLIOTECA', graphHint: 'Documentos y sus enlaces', graphNeighbors: 'Solo vecinos del documento actual', graphFit: 'Encuadrar', graphClose: 'Cerrar grafo', graphCount: '{nodes} documentos · {edges} enlaces', graphEmpty: 'No hay documentos Markdown en esta biblioteca.', tagsLabel: 'Etiquetas', tagFilter: 'Filtrar por etiqueta', tagFilterHint: 'Escribe #etiqueta en la búsqueda',
     quickCaptureLabel: 'CAPTURA RÁPIDA', quickCaptureTitle: 'Guarda lo que tienes en mente', quickCapturePlaceholder: 'Escribe o pega texto, una URL o una idea…', quickCaptureHint: 'Enter guarda · Shift+Enter crea una línea · Esc cierra', inboxWorkspace: 'ESPACIO DE CAPTURA', inboxTitle: 'Inbox', inboxHomeHint: 'Captura ahora, organiza después.', newCapture: 'Nueva captura', chooseInbox: 'Elige una carpeta para tu Inbox', chooseInboxHint: 'Las capturas serán archivos locales normales, siempre bajo tu control.', chooseFolder: 'Elegir carpeta', importFiles: 'Importar archivos', selectCapture: 'Selecciona una captura', selectCaptureHint: 'Aquí podrás revisar y procesar lo que guardaste.', collections: 'Colecciones', sortBy: 'Ordenar por', mostRecent: 'Más reciente', name: 'Nombre', color: 'Color', quickAccess: 'Acceso rápido', favorites: 'Favoritos', activity: 'Actividad', recent: 'Recientes', editLibrary: 'Editar biblioteca', optionalIcon: 'Icono opcional', saveChanges: 'Guardar cambios', openInFolder: 'Abrir en carpeta',
     noRecentHome: 'No hay archivos recientes.', noFavoritesHome: 'Aún no has añadido favoritos.', fileCount: 'archivos', unknownError: 'error desconocido', folderNoDocuments: 'La carpeta no tiene documentos compatibles.', noHeadings: 'El documento no tiene encabezados.', visualNoHeadings: 'Este documento no usa encabezados Markdown.', sections: 'secciones', words: 'palabras', lines: 'líneas', referencesMarkdown: 'Las referencias se calculan para Markdown.', noOutgoing: 'Sin enlaces salientes.', noBacklinks: 'Sin backlinks.', unresolvedLink: 'Enlace no resuelto', minimal: 'Mínimo', low: 'Bajo', medium: 'Medio', high: 'Alto', xhigh: 'Muy alto', max: 'Máximo', bold: 'Negrita', italic: 'Cursiva', strike: 'Tachado', inlineCode: 'Código inline', headingOne: 'Título 1', headingTwo: 'Título 2', headingThree: 'Título 3', paragraph: 'Párrafo normal', quote: 'Cita', bulletList: 'Lista', numberedList: 'Lista numerada', removeFormat: 'Quitar formato',
   },
@@ -813,6 +817,7 @@ const TRANSLATIONS = {
     settingsTitle: 'Settings', theme: 'Theme', light: 'Light', dark: 'Dark', fontSize: 'Font size', accentColor: 'Accent color', gold: 'Gold', teal: 'Teal', coral: 'Coral', green: 'Green', purple: 'Purple', readerFont: 'Reading font', readingLayout: 'Reading layout', readingWidth: 'Column width', readingWidthAuto: 'Automatic', readingLineHeight: 'Line spacing', readingMargin: 'Margins', readingLayoutReset: 'Reset reading settings', readingMultiplier: '×', history: 'History', clearRecents: 'Clear recent files', globalCapture: 'Global capture', inboxShortcut: 'Inbox global shortcut', saveShortcut: 'Save shortcut', inboxFolder: 'Inbox folder', notConfigured: 'Not configured', changeFolder: 'Change folder', gettingStarted: 'Getting started', showTutorial: 'View tutorial', highlightYellow: 'Highlight yellow', highlightGreen: 'Highlight green', highlightPink: 'Highlight pink', highlightBlue: 'Highlight blue', removeHighlight: 'Remove highlight', backup: 'Backup', exportBackup: 'Export .zip', importBackup: 'Restore',
     noteTemplate: 'Template', blankTemplate: 'Blank', dailyNote: 'Daily note', dailyNoteShortcut: 'Ctrl/Cmd+Shift+D', dailyNeedsFolder: 'Open a folder before creating the daily note.', dailyUnsaved: 'Save the current changes before opening the daily note.', dailyFailed: 'Could not open the daily note', draftFound: 'There is an unsaved draft from {date}.', draftRecover: 'Recover', draftDiscard: 'Discard', draftReplaceConfirm: 'Replace the current changes with the draft?', pasteImageNoPath: 'This document has no disk path: open it from the library to paste images.', pasteImageUnsupported: 'Only PNG, JPEG, GIF, WebP or BMP images can be pasted.', pasteImageFailed: 'Could not save the image',
     commandPalette: 'Command palette', paletteOpenPlaceholder: 'Open file…', paletteHint: 'Type to filter the folder documents', typeToSearch: 'Type a word or phrase.', noResults: 'No results found.', currentLibrary: 'Current library', quickCaptureShortcut: 'Ctrl+Alt+Space', openInbox: 'Open Inbox', pendingCaptures: 'Pending captures', systemPicker: 'System picker', changeLibrary: 'Change library', folderNavigationShortcut: 'Ctrl+Shift+F', focusMode: 'Focus mode', focusModeShortcut: 'Ctrl/Cmd+Shift+L', navigation: 'Navigation', openCodex: 'Open Codex', themeModes: 'Light / dark', changeTheme: 'Toggle theme', newPageLabel: 'NEW PAGE', createMarkdown: 'Create Markdown', title: 'Title', titlePlaceholder: 'Idea about the project', createdIn: 'Created in', createAndEdit: 'Create and edit', captureClipboard: 'Capture clipboard', addFile: 'Add file', capture: 'Capture', captures: 'Captures', backlinks: 'Backlinks',
+    exportHighlights: 'Export highlights', exportHighlightsHint: 'Saves a .md summary next to the document', exportHighlightsMarkdownOnly: 'Open a Markdown document to export its highlights.', exportHighlightsUnsaved: 'Save the document changes before exporting.', exportHighlightsEmpty: 'This document has no highlights or notes to export.', exportHighlightsOverwrite: '“{name}” already exists. Overwrite it? Cancel saves a copy with a suffix.', exportHighlightsDone: 'Summary exported', exportHighlightsFailed: 'Could not export the summary', printDocument: 'Print / PDF', printShortcut: 'Ctrl/Cmd+Shift+P', printWithUrls: 'Print with link URLs', printWithUrlsHint: 'Shows the address after each link', printEmpty: 'Open a document to print it.', printUnsupported: 'This environment cannot print.', graphTitle: 'Link graph', graphEyebrow: 'LIBRARY', graphHint: 'Documents and their links', graphNeighbors: 'Only neighbors of the current document', graphFit: 'Fit', graphClose: 'Close graph', graphCount: '{nodes} documents · {edges} links', graphEmpty: 'There are no Markdown documents in this library.', tagsLabel: 'Tags', tagFilter: 'Filter by tag', tagFilterHint: 'Type #tag in the search',
     quickCaptureLabel: 'QUICK CAPTURE', quickCaptureTitle: 'Save what is on your mind', quickCapturePlaceholder: 'Type or paste text, a URL or an idea…', quickCaptureHint: 'Enter saves · Shift+Enter adds a line · Esc closes', inboxWorkspace: 'CAPTURE SPACE', inboxTitle: 'Inbox', inboxHomeHint: 'Capture now, organize later.', newCapture: 'New capture', chooseInbox: 'Choose a folder for your Inbox', chooseInboxHint: 'Captures are regular local files, always under your control.', chooseFolder: 'Choose folder', importFiles: 'Import files', selectCapture: 'Select a capture', selectCaptureHint: 'Review and process what you saved here.', collections: 'Collections', sortBy: 'Sort by', mostRecent: 'Most recent', name: 'Name', color: 'Color', quickAccess: 'Quick access', favorites: 'Favorites', activity: 'Activity', recent: 'Recent', editLibrary: 'Edit library', optionalIcon: 'Optional icon', saveChanges: 'Save changes', openInFolder: 'Open in folder',
     noRecentHome: 'No recent files.', noFavoritesHome: 'You have not added favorites yet.', fileCount: 'files', unknownError: 'unknown error', folderNoDocuments: 'The folder has no supported documents.', noHeadings: 'This document has no headings.', visualNoHeadings: 'This document does not use Markdown headings.', sections: 'sections', words: 'words', lines: 'lines', referencesMarkdown: 'References are calculated for Markdown.', noOutgoing: 'No outgoing links.', noBacklinks: 'No backlinks.', unresolvedLink: 'Unresolved link', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Very high', max: 'Maximum', bold: 'Bold', italic: 'Italic', strike: 'Strikethrough', inlineCode: 'Inline code', headingOne: 'Heading 1', headingTwo: 'Heading 2', headingThree: 'Heading 3', paragraph: 'Normal paragraph', quote: 'Quote', bulletList: 'Bullet list', numberedList: 'Numbered list', removeFormat: 'Remove formatting',
   },
@@ -894,6 +899,42 @@ function applyLanguage(language) {
 
 let updater = null
 let backNavigation = null
+
+// Grupo C: exportar resaltados, imprimir, etiquetas y grafo de enlaces (lógica en sus módulos).
+const highlightsExporter = createHighlightsExporter({
+  panel: annotationsPanel,
+  controller: annotationsPanelController,
+  invoke,
+  getState: () => ({ path: state.filePath, fileName: state.fileName, kind: state.documentKind, dirty: state.dirty }),
+  documentExists: (path) => state.documentIndex.some((entry) => normalizedPath(entry.path).toLowerCase() === normalizedPath(path).toLowerCase()),
+  refreshLibrary: () => (state.folder ? loadFolder(state.folder, { keepTabs: true }) : Promise.resolve(true)),
+  openDocument: (path) => loadFileFromPath(path),
+  showMessage,
+  text: (key) => t(key),
+  language: () => state.language,
+})
+const printCurrentDocument = (showUrls = false) => void printReader({ reader, fileName: state.fileName, showUrls, showMessage, text: (key) => t(key) })
+function openTagSearch(tag = '') {
+  openPalette('search')
+  if (commandPalette.classList.contains('hidden')) return
+  paletteInput.value = `#${tag}`
+  renderPaletteResults(paletteInput.value)
+}
+const fileTags = createFileTags({ anchor: metaInfo, onSelect: openTagSearch, label: () => t('tagsLabel') })
+const linkGraph = createLinkGraph({
+  getEntries: () => state.documentIndex,
+  resolve: resolveIndexedReference,
+  getCurrentPath: () => state.filePath,
+  openDocument: (path) => void loadFileFromPath(path),
+  text: (key) => t(key),
+})
+// Ctrl/Cmd+P ya es Apertura rápida: imprimir usa Ctrl/Cmd+Shift+P y se atiende antes que ese atajo.
+window.addEventListener('keydown', (event) => {
+  if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.altKey || event.key.toLowerCase() !== 'p') return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  printCurrentDocument()
+}, true)
 
 function libraries() {
   try {
@@ -3276,6 +3317,11 @@ const PALETTE_COMMANDS = [
   { labelKey: 'sidebarToggle', hintKey: 'navigation', run: () => toggleSidebar() },
   { labelKey: 'annotationsTitle', hintKey: 'annotationsHint', run: toggleAnnotationsPanel },
   { labelKey: 'openCodex', hintKey: 'localAssistant', run: () => void openCodexPanel() },
+  { labelKey: 'exportHighlights', hintKey: 'exportHighlightsHint', run: () => void highlightsExporter.run() },
+  { labelKey: 'printDocument', hintKey: 'printShortcut', run: () => printCurrentDocument() },
+  { labelKey: 'printWithUrls', hintKey: 'printWithUrlsHint', run: () => printCurrentDocument(true) },
+  { labelKey: 'graphTitle', hintKey: 'graphHint', run: () => linkGraph.open() },
+  { labelKey: 'tagFilter', hintKey: 'tagFilterHint', run: () => openTagSearch() },
   { labelKey: 'changeTheme', hintKey: 'themeModes', run: () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
 ]
 
@@ -3345,6 +3391,8 @@ function paletteEntries(query) {
   if (state.paletteMode === 'commands') return PALETTE_COMMANDS.filter((item) => !term || `${paletteLabel(item)} ${paletteItemHint(item)}`.toLowerCase().includes(term))
   if (state.paletteMode === 'files') return state.documentIndex.filter((item) => !term || relativePath(item.path).toLowerCase().includes(term)).slice(0, 80)
   if (!term) return []
+  // `#etiqueta` filtra por etiquetas (frontmatter o en línea) en vez de por texto.
+  if (term.startsWith('#')) return parseTagQuery(term) ? filterByTag(state.documentIndex, term) : []
   return state.documentIndex.filter((item) => `${item.name}\n${item.searchableText || ''}`.toLowerCase().includes(term)).slice(0, 100)
 }
 
@@ -3356,7 +3404,7 @@ function renderPaletteResults(query) {
   }
   paletteResults.innerHTML = results.map((item, index) => {
     const isCommand = state.paletteMode === 'commands'
-    const snippet = isCommand ? paletteItemHint(item) : state.paletteMode === 'search' ? searchSnippet(item.searchableText || '', query) : relativePath(item.path)
+    const snippet = isCommand ? paletteItemHint(item) : state.paletteMode === 'search' ? (parseTagQuery(query) ? tagsForEntry(item).map((tag) => `#${tag}`).join(' ') : searchSnippet(item.searchableText || '', query)) : relativePath(item.path)
     return `<button class="palette-result${index === 0 ? ' active' : ''}" data-palette-index="${index}" type="button"><span><strong>${escapeHtml(isCommand ? paletteLabel(item) : item.label || item.name)}</strong><small>${escapeHtml(snippet)}</small></span><em>${escapeHtml(isCommand ? uiText('Comando', 'Command') : item.kind)}</em></button>`
   }).join('')
 }
@@ -3414,6 +3462,7 @@ function resolveIndexedReference(sourcePath, reference) {
 }
 
 function renderReferences() {
+  fileTags.update(state.markdown, state.documentKind === 'markdown' && Boolean(state.filePath))
   if (state.documentKind !== 'markdown' || !state.filePath) {
     referenceCount.textContent = '0'
     referencesBox.innerHTML = `<p class="muted">${t('referencesMarkdown')}</p>`
@@ -3440,6 +3489,7 @@ const hiddenLayer = (element, close = () => element.classList.add('hidden')) => 
 backNavigation = isNative ? null : createBackNavigation({
   layers: [
     hiddenLayer(commandPalette, closePalette),
+    hiddenLayer(linkGraph.element, linkGraph.close),
     hiddenLayer(quickCapture, closeQuickCapture),
     hiddenLayer(newNoteModal, closeNewNoteDialog),
     hiddenLayer(libraryEditor),
