@@ -35,9 +35,11 @@ async function renderPdf(reader, bytes, isCurrent) {
   let resizeTimer
   let intersectionObserver
   let resizeObserver
+  let searchSource = null
   const cleanup = () => {
     if (disposed) return
     disposed = true
+    if (reader._searchSource === searchSource) reader._searchSource = null
     intersectionObserver?.disconnect()
     resizeObserver?.disconnect()
     clearTimeout(resizeTimer)
@@ -126,6 +128,15 @@ async function renderPdf(reader, bytes, isCurrent) {
     }, 120)
   })
   resizeObserver.observe(shell)
+  // El buscador extrae el texto con getTextContent: el canvas no tiene capa de texto.
+  searchSource = {
+    type: 'pdf',
+    numPages: pages.length,
+    getPage: (pageNumber) => pages[pageNumber - 1].page,
+    slot: (pageNumber) => pages[pageNumber - 1]?.slot || null,
+    isDisposed: () => disposed,
+  }
+  reader._searchSource = searchSource
   throwIfStale(isCurrent)
   return { words: 0, detail: uiText(`${pdf.numPages} páginas`, `${pdf.numPages} pages`), detailEs: `${pdf.numPages} páginas`, detailEn: `${pdf.numPages} pages` }
 }
@@ -166,12 +177,17 @@ async function renderEpub(reader, bytes, isCurrent) {
   const shell = reader.querySelector('.ebook-document')
   const sentinel = reader.querySelector('.visual-loading')
   let nextChapter = 0
-  let loading = false
+  let batch = null
   let disposed = false
   let words = 0
-  const appendBatch = async () => {
-    if (loading || disposed || !isCurrent() || nextChapter >= chapterFiles.length) return
-    loading = true
+  // Si ya hay un lote en curso se devuelve el mismo: así quien espera (el
+  // buscador) sabe cuándo terminó de verdad.
+  const appendBatch = () => {
+    if (!batch) batch = loadBatch().finally(() => { batch = null })
+    return batch
+  }
+  const loadBatch = async () => {
+    if (disposed || !isCurrent() || nextChapter >= chapterFiles.length) return
     const end = Math.min(chapterFiles.length, nextChapter + 4)
     for (; nextChapter < end && !disposed; nextChapter += 1) {
       const html = await chapterFiles[nextChapter].async('text')
@@ -184,14 +200,26 @@ async function renderEpub(reader, bytes, isCurrent) {
       if (shell.childElementCount) shell.appendChild(document.createElement('hr'))
       shell.appendChild(chapter)
     }
-    loading = false
     sentinel.classList.toggle('hidden', nextChapter >= chapterFiles.length)
   }
   const observer = new IntersectionObserver((entries) => {
     if (entries.some((entry) => entry.isIntersecting)) void appendBatch()
   }, { root: reader.parentElement, rootMargin: '1200px 0px' })
   observer.observe(sentinel)
-  reader._visualCleanup = () => { disposed = true; observer.disconnect() }
+  // Para buscar en todo el libro hay que cargar los capítulos pendientes.
+  const searchSource = {
+    type: 'dom',
+    isComplete: () => nextChapter >= chapterFiles.length,
+    prepare: async () => {
+      while (!disposed && isCurrent() && nextChapter < chapterFiles.length) await appendBatch()
+    },
+  }
+  reader._searchSource = searchSource
+  reader._visualCleanup = () => {
+    disposed = true
+    observer.disconnect()
+    if (reader._searchSource === searchSource) reader._searchSource = null
+  }
   await appendBatch()
   throwIfStale(isCurrent)
   return { words, detail: uiText(`${chapterFiles.length} capítulos · carga progresiva`, `${chapterFiles.length} chapters · progressive loading`), detailEs: `${chapterFiles.length} capítulos · carga progresiva`, detailEn: `${chapterFiles.length} chapters · progressive loading` }
